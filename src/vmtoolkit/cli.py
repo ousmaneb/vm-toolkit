@@ -328,12 +328,16 @@ def serve(
 
 
 @app.command("backup")
-def backup_cmd(ctx: typer.Context, keep: int = typer.Option(14, help="How many dated copies to keep.")):
-    """Copy the database to data/backups/, keeping the newest copies. `vmt serve` does this daily."""
+def backup_cmd(ctx: typer.Context, keep: int = typer.Option(14, help="How many dated copies to keep here.")):
+    """Copy the database to data/backups/, and upload it to [backup] target if one is set. `vmt daily` does this."""
     from .backup import backup
+    from .offsite import upload
 
-    target, removed = backup(settings_from(ctx), keep=keep)
+    settings = settings_from(ctx)
+    target, removed = backup(settings, keep=keep)
     typer.echo(f"Backed up to {target}" + (f"; removed {len(removed)} older copies." if removed else "."))
+    uploaded = upload(settings, target, keep=int(settings.section("backup").get("remote_keep", 30)))
+    typer.echo(uploaded or "No off-site copy: set [backup] target in config.toml to keep one off this server.")
 
 
 @users_app.command("add")
@@ -1038,14 +1042,18 @@ def main():
     handler = logging.StreamHandler()
     handler.addFilter(RedactSecrets())
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s", handlers=[handler])
+    # The storage SDKs log every credential and endpoint lookup at INFO.
+    for name in ("botocore", "boto3", "s3transfer", "azure"):
+        logging.getLogger(name).setLevel(logging.WARNING)
     from .llm import LLMError
     from .fakedata import FakeDataError
     from .nessus import NessusError
+    from .offsite import BackupError
     from .tickets import TicketError
     from .web import WebError
 
     try:
         app()
-    except (ConfigError, NessusError, WebError, FakeDataError, TicketError, LLMError) as e:
+    except (ConfigError, NessusError, WebError, FakeDataError, TicketError, LLMError, BackupError) as e:
         typer.echo(f"Error: {redact(str(e))}", err=True)
         sys.exit(1)

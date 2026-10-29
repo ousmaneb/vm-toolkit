@@ -1,4 +1,4 @@
-"""`vmt serve`: the container entry point. Runs the dashboard, and `vmt daily` plus a backup once a day.
+"""`vmt serve`: the container entry point. Runs the dashboard, and `vmt daily` (which ends with a backup) once a day.
 
 One process for both, because the dashboard and the daily run must share the same data volume, and
 most container platforms attach a volume to one service only.
@@ -96,8 +96,7 @@ def serve(settings: Settings, port: int, host: str = "0.0.0.0") -> int:
             marker.write_text(last_run.isoformat())
             log.info("Starting the daily routine.")
             code = _vmt(settings, "daily")
-            log.info("Daily routine finished with exit code %s. Backing up the database.", code)
-            _vmt(settings, "backup")
+            log.info("Daily routine finished with exit code %s.", code)
         time.sleep(CHECK_EVERY)
     log.error("The dashboard stopped (exit code %s).", dashboard.returncode)
     return dashboard.returncode or 1

@@ -48,6 +48,16 @@ monitor = true
 # Write the CEO and CISO reports on this day, or whenever the newest one is over a week old.
 report_weekday = "monday"
 
+[backup]
+# Keep copies of the database off this server. Daily backups are uploaded here after the local copy.
+#   "s3://bucket/prefix"        AWS S3 or any S3-compatible store (Railway buckets, R2, Backblaze, MinIO).
+#                               AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY go in .env; AWS_ENDPOINT_URL
+#                               and AWS_REGION too for non-AWS stores.
+#   "azure://container/prefix"  Azure Blob Storage; AZURE_STORAGE_CONNECTION_STRING goes in .env.
+target = ""
+# How many daily copies to keep in the remote store.
+remote_keep = 30
+
 [email]
 # Used when "email" is in alerts.channels. SMTP_USERNAME and SMTP_PASSWORD go in .env.
 host = "smtp.example.com"

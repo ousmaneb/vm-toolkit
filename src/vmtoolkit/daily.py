@@ -34,6 +34,9 @@ PROCESS = [
 MONITOR = ("GitHub and news", ["monitor"])
 # KEV and EPSS were refreshed by Enrich a moment ago.
 ALERT = ("Alerts", ["alert", "--no-refresh"])
+# Runs even when the Nessus pull failed: it protects the data already there. Before the alerts, so a
+# failed off-site upload is reported the same day.
+BACKUP = ("Back up database", ["backup"])
 REPORT = ("Weekly reports", ["report"])
 
 Runner = Callable[[list[str]], tuple[int, str]]
@@ -108,12 +111,13 @@ def run_daily(conn: sqlite3.Connection, settings: Settings, run: Runner | None =
             step(*MONITOR)
     else:
         echo("  Skipping the rest, so stale data isn't reported as today's.")
+    step(*BACKUP)
 
     status = "failed" if failed else "ok"
     message = ""
     if failed:
         message = (f"The automatic daily run on {now:%Y-%m-%d} had problems. " + " ".join(errors)
-                   + (" Nothing after the Nessus pull ran." if not pulled else "")
+                   + (" Nothing was refreshed after the Nessus pull failed." if not pulled else "")
                    + f" Details: {log_path}")
     # Recorded before the alert step, so the alert step sends the failure too.
     with conn:

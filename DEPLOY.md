@@ -6,8 +6,8 @@ on Railway, Azure Container Apps and AWS ECS. Only how you set variables and att
 ## What runs in the container
 
 - **`vmt serve`** runs the dashboard on `$PORT`. Every day at `[daily] time` (local time, set by `TZ`)
-  it runs `vmt daily` and then `vmt backup`. If the container was off at that time, both run when it
-  next starts.
+  it runs `vmt daily`, which ends with a database backup. If the container was off at that time, it
+  runs when the container next starts.
 - **All data lives in `/data`:** the database, history, reports, logs, raw Nessus downloads,
   backups and the Tailscale node state. Mount persistent storage there.
 - **Single instance:** run exactly one copy, because SQLite allows one writer.
@@ -34,6 +34,7 @@ Nothing about your environment goes in the repository. The repository is public,
 | `LLM_API_KEY` | no | Only for the LLM features. |
 | `NVD_API_KEY`, `GITHUB_TOKEN` | no | Faster NVD lookups and GitHub searches. |
 | `JIRA_EMAIL`, `JIRA_API_TOKEN`, `SN_USERNAME`, `SN_PASSWORD` | no | Only to push tickets. |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `AWS_ENDPOINT_URL` or `AZURE_STORAGE_CONNECTION_STRING` | recommended | Off-site backups; see [Backups](#backups). |
 | `PORT` | set by the platform | Port the dashboard listens on (default 8501). |
 | `VMT_PROXY_HOPS` | no | How many proxies sit in front of the app (default 1: Railway's edge, or one load balancer). Used to find each visitor's address in `X-Forwarded-For`. |
 
@@ -130,14 +131,37 @@ is kept.
 
 ## Backups
 
-`vmt serve` writes a dated copy of the database to `/data/backups/` after each daily run and keeps
-the newest 14. Those copies sit on the same volume as the database. They protect against mistakes
-and corruption, but not against losing the volume. For that:
+`vmt daily` ends with `vmt backup`, which:
 
-- **Railway:** turn on volume backups on the service.
-- **Anywhere:** copy `/data/backups/` and `/data/raw/` off the platform regularly.
+- writes a dated copy of the database to `/data/backups/` and keeps the newest 14 there; and
+- if `[backup] target` is set, uploads that copy to storage off the platform and keeps the newest
+  `remote_keep` (default 30) there.
 
-To restore, stop the service, copy a backup over `/data/vmt.db`, and start it again.
+The local copies sit on the same volume as the database, so they don't survive losing the volume. Set
+an off-site target:
+
+```toml
+[backup]
+target = "s3://my-vmt-backups/prod"       # or "azure://vmt-backups/prod"
+remote_keep = 30
+```
+
+| Store | Variables |
+|---|---|
+| AWS S3 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` |
+| Railway bucket, Cloudflare R2, Backblaze B2, MinIO | the same, plus `AWS_ENDPOINT_URL` (the store's S3 endpoint) |
+| Azure Blob Storage | `AZURE_STORAGE_CONNECTION_STRING` |
+
+Notes:
+
+- **Access:** keep the bucket or container private, and give the key permission to write, list and
+  delete in that one location only.
+- **Encryption:** S3 uploads ask for server-side encryption (AES-256). Azure encrypts all blobs at
+  rest.
+- **Failures:** a failed upload fails the daily run, so it's reported through your alert channel.
+
+To restore, stop the service, download a copy (or take one from `/data/backups/`), put it at
+`/data/vmt.db`, and start the service again.
 
 ## Moving to Azure or AWS
 
@@ -173,6 +197,6 @@ docker run -p 8080:8080 -v vmt-data:/data -e PORT=8080 \
 
 ```sh
 docker run --rm -v "$PWD":/src:ro python:3.12.10-slim-bookworm sh -c \
-  'cp -r /src /tmp/b && cd /tmp/b && pip install -q ".[dashboard,ml,llm,report]" && pip freeze --exclude-editable | grep -v "^vmtoolkit"' \
+  'cp -r /src /tmp/b && cd /tmp/b && pip install -q ".[dashboard,ml,llm,report,backup]" && pip freeze --exclude-editable | grep -v "^vmtoolkit"' \
   > requirements.lock
 ```

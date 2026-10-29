@@ -16,7 +16,7 @@ of this file covers running it on one computer.
 cd vm-toolkit
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dashboard,ml,llm,report]"
+pip install -e ".[dashboard,ml,llm,report,backup]"
 vmt init
 ```
 
@@ -26,7 +26,7 @@ vmt init
 cd vm-toolkit
 py -m venv .venv
 .venv\Scripts\Activate.ps1
-pip install -e ".[dashboard,ml,llm,report]"
+pip install -e ".[dashboard,ml,llm,report,backup]"
 vmt init
 ```
 
@@ -42,7 +42,7 @@ folder or put the environment elsewhere:
 ```sh
 python3 -m venv ~/.venvs/vmtoolkit
 source ~/.venvs/vmtoolkit/bin/activate
-pip install -e ".[dashboard,ml,llm,report]"
+pip install -e ".[dashboard,ml,llm,report,backup]"
 ```
 
 ### Configuration
@@ -885,8 +885,9 @@ vmt schedule remove
 1. `nessus pull`
 2. `enrich`, `dedupe`, `prioritize`, `plan`, `forecast`, `history save`
 3. `monitor`
-4. `alert`
-5. `report`, on `report_weekday` or whenever the newest report is more than 7 days old (so a
+4. `backup`, which runs even if the Nessus pull failed
+5. `alert`
+6. `report`, on `report_weekday` or whenever the newest report is more than 7 days old (so a
    missed day is caught up)
 
 What happens when something fails:
@@ -1015,7 +1016,7 @@ vmt users list
 vmt users passwd alice       # new password; also clears a lockout
 vmt users remove alice
 vmt serve                    # dashboard + daily routine + backup, for containers
-vmt backup                   # dated copy of the database in data/backups/ (keeps 14)
+vmt backup                   # dated copy in data/backups/ (keeps 14), uploaded to [backup] target if set
 ```
 
 **Sign-in:**
@@ -1028,8 +1029,13 @@ vmt backup                   # dated copy of the database in data/backups/ (keep
 - A sign-in lasts 8 hours across reloads, until you sign out or your password changes.
 - Sign-ins and every tool run are logged with the username.
 
-**`vmt serve`** runs the dashboard, plus `vmt daily` and `vmt backup` once a day at `[daily] time`.
-It is what the container runs; see [DEPLOY.md](DEPLOY.md).
+**`vmt serve`** runs the dashboard, plus `vmt daily` once a day at `[daily] time`. It is what the
+container runs; see [DEPLOY.md](DEPLOY.md).
+
+**Off-site backups:** set `[backup] target` to `s3://bucket/prefix` (AWS S3 or any S3-compatible
+store) or `azure://container/prefix`, and `vmt backup` uploads each copy there and keeps the newest
+`remote_keep`. Needs `pip install -e ".[backup]"`; see [DEPLOY.md](DEPLOY.md#backups) for the
+credentials.
 
 **Production mode:** `VMT_ENV=production` turns off demo data and hides the database picker.
 

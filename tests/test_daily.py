@@ -32,7 +32,8 @@ def test_full_run_on_report_day(conn, settings):
     vmt = FakeVmt()
     assert run_daily(conn, settings, run=vmt, now=MONDAY, echo=lambda *_: None) == "ok"
     assert vmt.calls == ["nessus pull", "enrich", "dedupe", "prioritize --top 10", "plan",
-                         "forecast --backtest-days 0", "history save", "monitor", "alert --no-refresh", "report"]
+                         "forecast --backtest-days 0", "history save", "monitor", "backup", "alert --no-refresh",
+                         "report"]
     row = conn.execute("SELECT * FROM daily_runs").fetchone()
     assert (row["status"], row["reports"]) == ("ok", "/r/2099-03-02-ceo.pdf, /r/2099-03-02-ciso.pdf")
     assert "=== exit code 0" in Path(row["log_path"]).read_text()
@@ -41,10 +42,11 @@ def test_full_run_on_report_day(conn, settings):
 def test_nessus_failure_stops_processing_and_alerts(conn, settings):
     vmt = FakeVmt(fail={"nessus pull"})
     assert run_daily(conn, settings, run=vmt, now=MONDAY, echo=lambda *_: None) == "failed"
-    # Only the alert still runs: it carries the failure notice. No report from stale data.
-    assert vmt.calls == ["nessus pull", "alert --no-refresh"]
+    # The backup and the alert still run: one protects the existing data, the other carries the failure
+    # notice. No report from stale data.
+    assert vmt.calls == ["nessus pull", "backup", "alert --no-refresh"]
     row = conn.execute("SELECT * FROM daily_runs").fetchone()
-    assert row["failed_steps"] == "Pull from Nessus" and "Nothing after the Nessus pull ran" in row["message"]
+    assert row["failed_steps"] == "Pull from Nessus" and "Nothing was refreshed" in row["message"]
     lines = run_alerts(conn, settings, dry_run=True)
     assert any("automatic daily run on 2099-03-02 had problems" in line for line in lines)
 

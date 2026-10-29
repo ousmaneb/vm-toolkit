@@ -15,5 +15,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: python -m pip install -e ".[dev,dashboard,ml,llm,report]"
+      - run: python -m pip install -e ".[dev,dashboard,ml,llm,report,backup]"
       - run: python -m pytest -q
