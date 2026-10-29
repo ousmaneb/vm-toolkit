@@ -31,20 +31,20 @@ which tools do the work.
 
 | # | Step | Status | Tools |
 |---|---|---|---|
-| 1 | **Know your assets**: every machine, how important it is, whether it's reachable from the internet | Partial | Machines are recorded from scans; importance and exposure are set in `[assets]` in `config.toml`. No owners yet. |
+| 1 | **Know your assets**: every machine, how important it is, whether it's reachable from the internet, who owns it | Built | `vmt assets` and the Assets page: importance, exposure, owner and team from `[assets]`, open and overdue findings, last scan. Machines that stop being scanned are alerted on. |
 | 2 | **Discover vulnerabilities**: regular scans of machines, containers and code dependencies | Built | `vmt nessus pull`, `vmt import` (Nessus, OpenVAS/Greenbone, Trivy), `vmt deps` |
 | 3 | **Combine and clean up**: one format, no duplicates, false positives removed | Built | `vmt import`, `vmt dedupe`, `vmt fp` |
 | 4 | **Add threat context**: is it exploited, how likely, how severe, is there exploit code | Built | `vmt enrich` (CISA KEV, EPSS, NVD, Exploit-DB, Metasploit), `vmt monitor`, `vmt exploit-model`, `vmt classify`, `vmt extract` |
 | 5 | **Prioritise by risk**: likelihood × impact × machine importance × exposure | Built | `vmt prioritize`, with written reasons for every rank |
 | 6 | **Plan the fixes**: group findings into updates, set deadlines by severity | Built | `vmt plan`, `[sla_days]` |
-| 7 | **Fix or reduce the risk**: patch, reconfigure, isolate, or accept the risk | Partial | `vmt tickets` (files, Jira, ServiceNow), `vmt triage` for fix steps. No formal risk acceptance with an expiry date yet. |
+| 7 | **Fix or reduce the risk**: patch, reconfigure, isolate, or accept the risk | Built | `vmt tickets` (files, Jira, ServiceNow) naming each machine's owner, `vmt triage` for fix steps, `vmt accept` for approved, time-limited risk acceptance. |
 | 8 | **Verify**: confirm each fix with a later scan | Built | A finding is marked fixed only when a later scan of the same machine stops reporting it; tickets close when all their findings are fixed. |
 | 9 | **Monitor continuously**: newly exploited CVEs, deadline risks, failed runs | Built | `vmt alert`, `vmt forecast`, `vmt daily` with `vmt schedule` or `vmt serve` |
 | 10 | **Measure and report**: open, overdue, time to fix, on-time rate, trends | Built | `vmt dashboard`, `vmt history`, `vmt report` (CEO and CISO PDFs) |
-| 11 | **Improve the process**: find and fix root causes | Partial | Report recommendations and the History page show the trend. No breakdown by team or software yet. |
+| 11 | **Improve the process**: find and fix root causes | Built | `vmt causes` and the Root causes page: by team, by software, and problems that came back after being fixed; the CISO report and CEO recommendations use them. |
 
-8 of the 11 steps are built and 3 are partial. Planned next: risk acceptance with an expiry and
-approver (step 7), machine owners and teams (step 1), and root-cause breakdowns (step 11).
+All 11 steps are built. The toolkit collects and analyses scan results; running the scans themselves
+stays with your scanners.
 
 ## Architecture
 
@@ -1064,6 +1064,81 @@ start of the period are rebuilt from first-seen and fixed dates, so the first re
 comparison. The patch plan and rankings come from the latest `vmt plan` and `vmt prioritize`, which
 `vmt daily` runs first. Reports from demo data carry a FAKE DATA watermark on every page.
 
+## Assets, risk acceptance and root causes
+
+### Assets: `vmt assets`
+
+```sh
+vmt assets              # every machine
+vmt assets --stale      # machines scans have stopped reaching
+vmt assets --unowned    # machines with no owner set
+```
+
+Each machine shows its importance, internet exposure, owner and team (from `[assets]`), its open,
+critical-or-high and overdue findings, and when a scan last reached it. Set owners in `config.toml`:
+
+```toml
+[assets."web-01.example.com"]
+criticality = "high"
+internet_facing = true
+owner = "alice@example.com"
+team = "Web"
+```
+
+How the owner and the coverage check are used:
+
+- Tickets name the owner next to each affected machine.
+- A machine that scans used to reach but haven't for `[coverage] stale_days` (default 14) is
+  flagged on the Assets page, listed in the reports, and alerted on once. Its findings only look
+  stable because nobody is looking.
+
+### Risk acceptance: `vmt accept`
+
+```sh
+vmt accept add 412 413 --reason "only reachable from the management VLAN" --approver "CISO" --until 2026-12-31
+vmt accept list           # active ones, soonest to expire first
+vmt accept list --all     # including expired and revoked
+vmt accept revoke 3
+```
+
+Use this when a finding can't be fixed yet and someone with authority agrees to leave it.
+
+- **What it needs:** a reason, an approver and an end date, at most `[acceptance] max_days`
+  (default 365) ahead. The person who records it is saved too: the signed-in user on the dashboard,
+  or the system user on the command line.
+- **While it's active:** the finding stays open and visible, and is marked in `vmt prioritize`. It
+  doesn't count as past its deadline, isn't forecast to miss one, and is left out of the patch plan
+  and tickets. A ticket whose remaining findings are all accepted closes with that reason.
+- **When it ends:** an alert goes out a week before and on the day, and the finding counts again.
+- **History stays correct:** counts for past days respect when each acceptance was active.
+- **In the reports:** the CISO report lists every accepted risk, and the CEO report counts them,
+  including any that are actively exploited.
+
+The dashboard's **Risk acceptance** page does the same, with a confirmation that the named approver
+agreed.
+
+### Root causes: `vmt causes`
+
+```sh
+vmt causes
+```
+
+Fixing findings one by one keeps the backlog steady; fixing what produces them shrinks it. This
+command and the **Root causes** page look at open problems and fixes from the last 90 days:
+
+- **By team:** machines, open, overdue, share of overdue, on-time rate, median days to fix, oldest
+  open problem.
+- **By software:** the package the scanner names, or its fix when it names none.
+- **Problems that came back:** a scan stopped reporting them and a later scan of the same machine
+  reported them again. This usually means the fix reached running machines but not the image or
+  template they're rebuilt from.
+
+The CISO report includes these tables. The CEO report turns them into recommendations, for example:
+
+- "Talk to <team>" when one team owns most of the overdue problems
+- "Fix the source, not just the machine" when problems keep coming back
+- "Give every machine an owner"
+
 ## Accounts, server mode and backups
 
 ```sh
@@ -1161,6 +1236,8 @@ Main tables:
 | `advisories`, `advisory_items` | Advisories read by `vmt extract`, and the facts pulled from them |
 | `mentions`, `chatter_spikes` | GitHub and news mentions of your CVEs, and the spikes found |
 | `notes`, `triage_results` | Your notes, and saved `vmt triage` answers |
+| `risk_acceptances` | Accepted risks: reason, approver, who recorded it, start, end and revocation |
+| `users`, `sessions` | Dashboard accounts and sign-in sessions (token hashes only) |
 | `daily_runs` | Each `vmt daily` run: status, failed steps, log file, reports written |
 | `history_snapshots` | Headline numbers for each day (rebuilt days are marked) |
 | `priority_history`, `plan_history` | Every day's ranking and patch plan |

@@ -343,6 +343,29 @@ def backup_cmd(ctx: typer.Context, keep: int = typer.Option(14, help="How many d
     typer.echo(uploaded or "No off-site copy: set [backup] target in config.toml to keep one off this server.")
 
 
+@app.command("causes")
+def causes_cmd(ctx: typer.Context):
+    """Where the problems come from: by team, by software, and problems that came back after being fixed."""
+    from .insights import analyse, headlines
+
+    settings = settings_from(ctx)
+    conn = db.connect(settings.db_path)
+    try:
+        result = analyse(conn, settings)
+    finally:
+        conn.close()
+    for line in headlines(result):
+        typer.echo(f"- {line}")
+    typer.echo(f"\n{'team':<24} {'machines':>8} {'open':>5} {'overdue':>7} {'share':>6} {'on time':>7} {'came back':>9}")
+    for t in result["teams"]:
+        on_time = f"{t['on_time']:.0%}" if t["on_time"] is not None else "n/a"
+        typer.echo(f"{t['team'][:24]:<24} {t['machines']:>8} {t['open']:>5} {t['overdue']:>7} "
+                   f"{t['share_of_overdue']:>6.0%} {on_time:>7} {t['came_back']:>9}")
+    typer.echo(f"\n{'software or fix':<60} {'machines':>8} {'open':>5} {'overdue':>7} {'came back':>9}")
+    for s in result["software"][:15]:
+        typer.echo(f"{s['software'][:60]:<60} {s['machines']:>8} {s['open']:>5} {s['overdue']:>7} {s['came_back']:>9}")
+
+
 @app.command("assets")
 def assets_cmd(
     ctx: typer.Context,

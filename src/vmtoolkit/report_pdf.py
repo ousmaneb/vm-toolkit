@@ -238,6 +238,26 @@ def detail_pages(d: ReportData) -> list:
                             table(["ID", "Machine", "Finding", "Severity", "Due", "Chance on time"], rows,
                                   [0.07, 0.16, 0.4, 0.1, 0.12, 0.15], {0, 5}) if rows else empty("None expected.")])]
 
+    teams = d.causes.get("teams", [])
+    rows = [[t["team"], t["machines"], t["open"], t["overdue"], pct(t["share_of_overdue"]), pct(t["on_time"]),
+             "n/a" if t["median_days_to_fix"] is None else f"{t['median_days_to_fix']:.0f}", t["came_back"]]
+            for t in teams]
+    software = d.causes.get("software", [])[:8]
+    srows = [[s["software"], s["machines"], s["open"], s["overdue"], s["fixed_90d"], s["came_back"]] for s in software]
+    story += [KeepTogether([p("Where the problems come from", h2),
+                            p(f"By team (set in [assets]), over open problems and fixes in the last {LOOKBACK_DAYS} "
+                              "days. 'Came back' counts problems that returned after a scan showed them fixed.",
+                              muted), Spacer(1, 4),
+                            table(["Team", "Machines", "Open", "Overdue", "Share of overdue", "On time",
+                                   "Median days to fix", "Came back"], rows,
+                                  [0.2, 0.1, 0.09, 0.1, 0.14, 0.1, 0.15, 0.12], {1, 2, 3, 4, 5, 6, 7})
+                            if rows else empty("No data yet.")]),
+              Spacer(1, 6),
+              KeepTogether([p("By software, most open problems first:", muted), Spacer(1, 4),
+                            table(["Software or fix", "Machines", "Open", "Overdue", "Fixed (90 days)", "Came back"],
+                                  srows, [0.46, 0.1, 0.09, 0.1, 0.13, 0.12], {1, 2, 3, 4, 5})
+                            if srows else empty("No data yet.")])]
+
     rows = [[f"#{a['id']}", a["machine"], a["title"] + ("  [KEV]" if a["kev"] else ""), a["expires_at"][:10],
              a["approved_by"], a["reason"]] for a in d.accepted]
     story += [KeepTogether([p(f"Accepted risks ({len(d.accepted)})", h2),

@@ -106,7 +106,8 @@ def test_plain_english_advice(lab, settings):
     assert d.impact[0].startswith("Criminals are actively using 1 weakness that we still have. It shows up as 1 "
                                   "open problem on 1 computer.")
     assert d.impact[1].startswith("That problem is past our own fix deadline.")
-    assert d.advice[0][0] == "Fix the 1 overdue actively exploited problem this week."
+    # No scans are recorded in this data, so checking the scanner comes first; stale data undermines the rest.
+    assert [a for a, _ in d.advice[:2]] == ["Check the scanner.", "Fix the 1 overdue actively exploited problem this week."]
     assert any(q.startswith("Which of the actively exploited weaknesses") for q in d.questions)
 
 

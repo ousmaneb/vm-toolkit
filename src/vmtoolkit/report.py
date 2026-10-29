@@ -11,7 +11,8 @@ from .acceptance import accepted_at, listing as acceptances, periods
 from .forecast import forecast
 
 SEVERITIES = ["critical", "high", "medium", "low"]
-LOOKBACK_DAYS = 90  # window for "how fast do we fix things", long enough to hold a useful number of fixes
+LOOKBACK_DAYS = 90
+MAX_ADVICE = 5  # a leadership page leads with the few things that matter most  # window for "how fast do we fix things", long enough to hold a useful number of fixes
 
 
 @dataclass
@@ -58,6 +59,7 @@ class ReportData:
     freshness: list[tuple[str, str]]
     accepted: list[dict] = field(default_factory=list)  # active risk acceptances
     stale: list[dict] = field(default_factory=list)  # machines scans have stopped reaching
+    causes: dict = field(default_factory=dict)  # insights.analyse(): by team, by software, repeat problems
     last_scan: datetime | None = None
     first_seen: datetime | None = None  # earliest finding: no trend can be claimed before there was data
     status: str = "green"
@@ -224,15 +226,22 @@ def build(conn: sqlite3.Connection, settings: Settings, days: int = 7, now: date
         last_scan=parse_iso(last_scan) if last_scan else None,
         accepted=acceptances(conn),
         stale=_stale(conn, settings, now),
+        causes=_causes(conn, settings, now),
         first_seen=min((f.first_seen for f in findings), default=None),
     )
     data.status, data.status_reason = rate(data)
     data.summary = summarize(data, days)
     data.attention = needs_attention(data)
     data.impact = business_impact(data)
-    data.advice = recommendations(data)
+    data.advice = recommendations(data)[:MAX_ADVICE]
     data.questions = questions(data)
     return data
+
+
+def _causes(conn: sqlite3.Connection, settings: Settings, now: datetime) -> dict:
+    from .insights import analyse
+
+    return analyse(conn, settings, now)
 
 
 def _stale(conn: sqlite3.Connection, settings: Settings, now: datetime) -> list[dict]:
@@ -396,8 +405,13 @@ def business_impact(d: ReportData) -> list[str]:
 
 
 def recommendations(d: ReportData) -> list[tuple[str, str]]:
-    """Concrete next steps, most urgent first."""
+    """Concrete next steps, most urgent first. The reports show the first MAX_ADVICE."""
     out = []
+    # Stale data undermines every other recommendation, so it comes first.
+    if d.last_scan is None or (d.generated_at - d.last_scan).days > 7:
+        when = f"since {d.last_scan:%B %d}" if d.last_scan else "yet"
+        out.append(("Check the scanner.",
+                    f"No new scan results have arrived {when}, so these numbers may be out of date."))
     late = [r for r in d.kev_open if r["overdue"]]
     if late:
         out.append((f"Fix the {_plural(len(late), 'overdue actively exploited problem')} this week.",
@@ -415,6 +429,22 @@ def recommendations(d: ReportData) -> list[tuple[str, str]]:
         out.append(("Set a regular maintenance window.",
                     "A fixed slot, for example every second week, stops updates waiting for spare time. It is the "
                     "most reliable way to meet deadlines."))
+    teams = [t for t in d.causes.get("teams", []) if t["team"] != "No team set"]
+    if teams and teams[0]["overdue"] >= 5 and teams[0]["share_of_overdue"] >= 0.4:
+        top = teams[0]
+        out.append((f"Talk to {top['team']}.",
+                    f"They own {top['share_of_overdue']:.0%} of the overdue problems ({top['overdue']}). Find out "
+                    "what is in the way: time, skills, or systems that can't be restarted."))
+    returned = [r for r in d.causes.get("came_back", []) if r["open"]]
+    if returned:
+        out.append(("Fix the source, not just the machine.",
+                    f"{_plural(len(returned), 'problem')} came back after being fixed. That usually means updates "
+                    "reach running machines but not the images or templates they're rebuilt from."))
+    unowned = next((t for t in d.causes.get("teams", []) if t["team"] == "No team set"), None)
+    if unowned and unowned["machines"] >= 5:
+        out.append(("Give every machine an owner.",
+                    f"{unowned['machines']} machines have no team or owner, so nobody is clearly responsible for "
+                    f"their {unowned['open']} open problems."))
     if d.overdue_by_machine and d.overdue_by_machine[0][1] >= 5:
         name, count = d.overdue_by_machine[0]
         out.append((f"Review {name}.",
@@ -424,10 +454,6 @@ def recommendations(d: ReportData) -> list[tuple[str, str]]:
         out.append(("Stop the backlog growing.",
                     "Either free up more time for fixing, or reduce how many new problems appear, for example by "
                     "retiring old software and computers that are no longer needed."))
-    if d.last_scan is None or (d.generated_at - d.last_scan).days > 7:
-        when = f"since {d.last_scan:%B %d}" if d.last_scan else "yet"
-        out.append(("Check the scanner.",
-                    f"No new scan results have arrived {when}, so these numbers may be out of date."))
     if not out:
         out.append(("Keep the current routine.",
                     "Nothing is overdue and fixes are on time. Keep scanning and patching on the same schedule."))

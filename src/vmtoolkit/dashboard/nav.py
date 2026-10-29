@@ -7,7 +7,7 @@ import streamlit as st
 from vmtoolkit.dashboard import style
 from vmtoolkit.dashboard.tools_page import GROUPS, TOOLS
 
-OVERVIEW = ["home", "dashboard", "history", "reports"]
+OVERVIEW = ["home", "dashboard", "history", "causes", "reports"]
 GROUP_ICONS = {"data": ":material/download:", "risk": ":material/shield:", "fix": ":material/build:",
                "intel": ":material/insights:", "ai": ":material/auto_awesome:", "settings": ":material/settings:"}
 SUMMARIES = {t.key: t.summary for t in TOOLS}
