@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vmtoolkit"
+version = "0.1.0"
+description = "Vulnerability management toolkit"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.31",
+    "requests-cache>=1.1",
+    "python-dotenv>=1.0",
+    "typer>=0.12",
+    "defusedxml>=0.7",
+    "packaging>=23",
+    "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+dashboard = ["streamlit>=1.66", "pandas>=2.0", "altair>=5"]
+ml = ["scikit-learn>=1.4", "numpy>=1.26", "scipy>=1.11"]
+llm = ["anthropic>=1.0", "pypdf>=4.0"]
+report = ["reportlab>=4.0"]
+dev = ["pytest>=8", "responses>=0.25"]
+
+[project.scripts]
+vmt = "vmtoolkit.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+vmtoolkit = ["templates/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

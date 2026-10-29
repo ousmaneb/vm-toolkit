@@ -1,0 +1,131 @@
+# vmtoolkit settings. Secrets (API keys, passwords) go in .env, never here.
+# Relative paths are resolved against the folder this file is in.
+
+[paths]
+data_dir = "data"
+
+[nessus]
+url = "https://localhost:8834"
+# Path to the Nessus CA certificate (download it from https://<nessus>:8834/getcert).
+# This is the safe way to trust Nessus's self-signed certificate.
+ca_cert = ""
+# Set to false to skip certificate checks entirely. A warning is printed on every run.
+verify_tls = true
+# Seconds to wait for Nessus to prepare an export before giving up.
+export_timeout = 300
+
+[import]
+# Nessus "info" findings are mostly inventory (open ports, OS detection) and are skipped by default.
+include_info = false
+
+[cache]
+# Hours to keep responses from outside websites before fetching again.
+# Use `vmt --offline ...` to work from the cache only.
+kev = 12
+epss = 12
+nvd = 168
+exploits = 168
+osv = 24
+github = 6
+default = 6         # news feeds, advisory pages and anything else
+
+[alerts]
+# Any of "console", "slack", "email". Console alerts are also appended to <data_dir>/alerts.log.
+channels = ["console"]
+# Alert when a CVE's EPSS score rises by at least this much since the previous stored score.
+epss_jump = 0.10
+# Also warn about critical and high findings likely to miss their [sla_days] deadline.
+deadline_warnings = true
+
+[daily]
+# What `vmt daily` does. Install it with `vmt schedule install`.
+# Pull new results from Nessus first. Turn off if you only import files by hand.
+nessus = true
+# Search GitHub and news for your CVEs (about a minute per 10 CVEs without a GITHUB_TOKEN).
+monitor = true
+# Write the CEO and CISO reports on this day, or whenever the newest one is over a week old.
+report_weekday = "monday"
+
+[email]
+# Used when "email" is in alerts.channels. SMTP_USERNAME and SMTP_PASSWORD go in .env.
+host = "smtp.example.com"
+port = 587          # 587 uses STARTTLS, 465 uses implicit TLS
+starttls = true
+from = "vmtoolkit@example.com"
+to = ["you@example.com"]
+
+[sla_days]
+# Days allowed to fix an open finding, by severity. Older findings show as overdue.
+critical = 15
+high = 30
+medium = 90
+low = 180
+
+# How important each machine is, used to rank vulnerabilities. Keys are machine names as the
+# scanners report them; wildcards like "*-db-*" work. Exact names win over wildcards.
+# Machines not listed count as "medium".
+#   criticality: low | medium | high | critical
+#   internet_facing: reachable from the internet (raises risk for network-exploitable CVEs)
+#   aliases: other names or IPs scanners use for the same machine
+# [assets."web-01.lab"]
+# criticality = "high"
+# internet_facing = false
+# aliases = ["192.168.56.10", "docker-web"]
+
+[prioritize]
+# score = 100 x likelihood x impact x machine importance x exposure
+# Minimum likelihood when Exploit-DB or Metasploit has a public exploit.
+exploit_floor = 0.5
+# Multiplier unless the machine is internet-facing and the CVE is network-exploitable.
+internal_factor = 0.8
+# Likelihood used when there's no EPSS score (no CVE, or not enriched yet).
+[prioritize.no_epss_likelihood]
+critical = 0.3
+high = 0.2
+medium = 0.05
+low = 0.01
+
+# Optional: `vmt tickets --push jira`. JIRA_EMAIL and JIRA_API_TOKEN go in .env.
+[jira]
+url = ""               # e.g. https://yourname.atlassian.net
+project = ""           # project key, e.g. "LAB"
+issue_type = "Task"
+
+# Optional: `vmt tickets --push servicenow`. SN_USERNAME and SN_PASSWORD go in .env.
+[servicenow]
+instance = ""          # e.g. https://dev12345.service-now.com
+table = "incident"
+resolved_state = 6     # the incident state number for "Resolved"
+close_code = "Solution provided"
+
+[exploit_model]
+# Earliest NVD feed year to train on. KEV started in 2021; older CVEs are mostly long settled.
+first_year = 2015
+
+[fp]
+# Flag open findings whose estimated false-positive chance is above this.
+threshold = 0.5
+
+[llm]
+# Used by `vmt extract --llm`, `vmt triage` and `vmt ask`. Its API key goes in .env as LLM_API_KEY.
+# provider must match the one implemented in src/vmtoolkit/llm_provider.py; model is that provider's model ID.
+provider = ""
+model = ""
+effort = "medium"          # low | medium | high | xhigh | max
+# Off: machine names, FQDNs and IP addresses are replaced with placeholders before anything is sent.
+send_hostnames = false
+# Optional: dollars per million [input, output] tokens for each model, to show the cost of each call.
+# [llm.prices]
+# "model-id" = [1.0, 5.0]
+
+[monitor]
+# GitHub search is rate limited, so only the highest-priority open CVEs are searched there.
+# News feeds are checked for all open CVEs.
+max_cves = 50
+github = true
+
+[monitor.feeds]
+"CISA advisories" = "https://www.cisa.gov/cybersecurity-advisories/all.xml"
+"SANS ISC" = "https://isc.sans.edu/rssfeed_full.xml"
+"BleepingComputer" = "https://www.bleepingcomputer.com/feed/"
+"The Hacker News" = "https://feeds.feedburner.com/TheHackersNews"

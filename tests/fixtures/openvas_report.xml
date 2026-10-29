@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic GVM report for tests. Hosts, IPs and CVEs are fake. -->
+<get_reports_response status="200" status_text="OK">
+  <report id="fake-report-0001" format_id="a994b278-1f62-11e1-96ac-406186ea4fc5">
+    <report id="fake-report-0001">
+      <task id="fake-task"><name>FAKE lab GVM scan</name></task>
+      <scan_start>2026-10-01T10:00:00Z</scan_start>
+      <scan_end>2026-10-01T10:45:12.123456789Z</scan_end>
+      <results>
+        <result id="r1">
+          <name>FAKE Apache HTTP Server vulnerability</name>
+          <host>192.0.2.30<hostname>fake-app-01.lab</hostname></host>
+          <port>443/tcp</port>
+          <nvt oid="1.3.6.1.4.1.25623.1.0.999001">
+            <name>FAKE Apache HTTP Server vulnerability</name>
+            <cvss_base>9.8</cvss_base>
+            <tags>summary=Synthetic summary for tests.|insight=Synthetic insight|solution_type=VendorFix</tags>
+            <solution type="VendorFix">Update to version 9.9.9 or later.</solution>
+            <refs>
+              <ref type="cve" id="CVE-2099-1001"/>
+              <ref type="url" id="https://example.invalid/advisory"/>
+            </refs>
+          </nvt>
+          <threat>High</threat>
+          <severity>9.8</severity>
+          <description>Installed version: 9.0.0</description>
+        </result>
+        <result id="r2">
+          <name>FAKE weak TLS cipher</name>
+          <host>192.0.2.30<hostname>fake-app-01.lab</hostname></host>
+          <port>general/tcp</port>
+          <nvt oid="1.3.6.1.4.1.25623.1.0.999002">
+            <cvss_base>4.3</cvss_base>
+            <tags>summary=Synthetic weak cipher.</tags>
+          </nvt>
+          <threat>Medium</threat>
+          <severity>4.3</severity>
+        </result>
+        <result id="r3">
+          <name>FAKE OS detection</name>
+          <host>192.0.2.31</host>
+          <port>general/tcp</port>
+          <nvt oid="1.3.6.1.4.1.25623.1.0.999003"><cvss_base>0.0</cvss_base></nvt>
+          <threat>Log</threat>
+          <severity>0.0</severity>
+        </result>
+      </results>
+      <host><ip>192.0.2.30</ip><detail><name>hostname</name><value>fake-app-01.lab</value></detail></host>
+      <host><ip>192.0.2.31</ip><detail><name>hostname</name><value>FAKE-Clean-01.lab</value></detail></host>
+    </report>
+  </report>
+</get_reports_response>
