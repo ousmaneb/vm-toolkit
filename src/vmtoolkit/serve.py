@@ -19,15 +19,32 @@ log = logging.getLogger(__name__)
 CHECK_EVERY = 30  # seconds
 
 
+# Set per mode, never at the top level: a top-level theme option stops the app following the system's
+# light or dark setting.
+_MODES = {
+    "light": {"primaryColor": "#2F6FED", "backgroundColor": "#F7F9FC", "secondaryBackgroundColor": "#EDF1F7",
+              "textColor": "#13233F", "borderColor": "#DCE3ED", "linkColor": "#2F6FED",
+              "font": "IBM Plex Sans, sans-serif", "headingFont": "IBM Plex Sans, sans-serif",
+              "sidebar.backgroundColor": "#0B1F3A", "sidebar.secondaryBackgroundColor": "#163463",
+              "sidebar.textColor": "#DCE6F5", "sidebar.primaryColor": "#8FB3FF", "sidebar.borderColor": "#24457A"},
+    "dark": {"primaryColor": "#5B8DF2", "linkColor": "#8FB3FF",
+             "font": "IBM Plex Sans, sans-serif", "headingFont": "IBM Plex Sans, sans-serif",
+             "sidebar.backgroundColor": "#0A1628", "sidebar.secondaryBackgroundColor": "#14294A",
+             "sidebar.textColor": "#DCE6F5", "sidebar.primaryColor": "#8FB3FF", "sidebar.borderColor": "#1F3A66"},
+}
+THEME = [part for mode, opts in _MODES.items() for key, value in opts.items()
+         for part in (f"--theme.{mode}.{key}", value)]
+
+
 def dashboard_command(settings: Settings, port: int, host: str, db_path: Path | None = None) -> list[str]:
     app_path = Path(__file__).parent / "dashboard" / "app.py"
     cmd = [sys.executable, "-m", "streamlit", "run", str(app_path), "--server.port", str(port),
            "--server.address", host,
            # Headless skips Streamlit's first-run email prompt, which would otherwise block here.
            "--server.headless", "true", "--browser.gatherUsageStats", "false",
-           # Blue to match the charts, set per mode so the app still follows the system's light or dark setting.
-           "--theme.light.primaryColor", "#256abf", "--theme.dark.primaryColor", "#3987e5",
-           "--client.toolbarMode", "minimal", "--", "--db", str(db_path or settings.db_path)]
+           # Fonts are served from dashboard/static, not a third-party font service.
+           "--server.enableStaticServing", "true",
+           "--client.toolbarMode", "minimal", *THEME, "--", "--db", str(db_path or settings.db_path)]
     if (settings.base_dir / "config.toml").exists():
         cmd += ["--config", str(settings.base_dir / "config.toml")]
     return cmd

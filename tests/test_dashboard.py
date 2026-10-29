@@ -94,8 +94,12 @@ def test_app_renders_with_fake_data_banner(tmp_path, monkeypatch, settings):
     at = testing.AppTest.from_file(str(app), default_timeout=60).run()
     assert not at.exception
     assert "FAKE DATA" in at.warning[0].value
-    assert at.title[0].value == "Vulnerability management"
-    assert [m.label for m in at.metric] == ["Open findings", "Critical or high", "Overdue", "Known exploited"]
+    blocks = [h.proto.body for h in at.get("html")]
+    hero = next(b for b in blocks if "vmt-hero" in b)
+    cards = next(b for b in blocks if "vmt-kpis" in b)
+    assert "Demo data" in hero and "open vulnerabilities." in hero and "Status:" in hero
+    for label in ("Open vulnerabilities", "Critical or high", "Past deadline", "Known exploited"):
+        assert label in cards
 
 
 def test_dashboard_page(tmp_path, monkeypatch, settings):
@@ -140,4 +144,12 @@ def test_home_page_on_an_empty_database(tmp_path, monkeypatch):
     monkeypatch.setattr("sys.argv", ["app.py", "--db", str(tmp_path / "vmt.db")])
     at = testing.AppTest.from_file(str(app), default_timeout=60).run()
     assert not at.exception
-    assert [m.value for m in at.metric] == ["0", "0", "0", "0"]
+    hero = next(h.proto.body for h in at.get("html") if "vmt-hero" in h.proto.body)
+    assert "No vulnerabilities on record yet." in hero
+
+
+def test_hero_escapes_database_text():
+    from vmtoolkit.dashboard.style import hero
+
+    html = hero("<b>x</b>", "<script>alert(1)</script>", "a & b", "red", '" onmouseover="x', {"critical": 1})
+    assert "<script>" not in html and "&lt;script&gt;" in html and "&quot; onmouseover" in html

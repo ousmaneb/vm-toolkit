@@ -1,11 +1,10 @@
 import logging
 import os
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
-
-import tomllib
 
 DEFAULTS = {
     "paths": {"data_dir": "data"},

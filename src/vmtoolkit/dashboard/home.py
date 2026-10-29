@@ -1,13 +1,13 @@
 """The home page: headline numbers, the next step to take, and the workflow with a link to every tool."""
 
-from datetime import datetime, timezone
 from pathlib import Path
 
 import streamlit as st
 
 from vmtoolkit.config import Settings
-from vmtoolkit.dashboard import metrics
+from vmtoolkit.dashboard import metrics, style
 from vmtoolkit.dashboard.tools_page import GROUPS, TOOLS
+from vmtoolkit.report import build
 
 STEPS = [
     ("data", "Get your scan results into the toolkit."),
@@ -38,38 +38,43 @@ def next_step(progress: dict[str, int] | None, demo: bool = True) -> tuple[str, 
             "dashboard")
 
 
+def summary(settings: Settings, db_path: Path):
+    """(progress, report data), or (None, None) before the database exists. The numbers are the same ones the
+    CEO report uses, so the dashboard and the PDFs never disagree."""
+    if not db_path.exists():
+        return None, None
+    with metrics.connect_readonly(db_path) as conn:
+        return metrics.progress(conn), build(conn, settings)
+
+
 def render(settings: Settings, db_path: Path, pages: dict):
-    st.title("Vulnerability management")
-    st.caption(f"Using {db_path.name}")
-
-    progress, summary = None, None
-    if db_path.exists():
-        with metrics.connect_readonly(db_path) as conn:
-            progress = metrics.progress(conn)
-            df = metrics.load_findings(conn)
-        sla = {k: int(v) for k, v in settings.section("sla_days").items()}
-        open_df = df[df.status == "open"]
-        summary = {
-            "Open findings": len(open_df),
-            "Critical or high": int(open_df.severity.isin(["critical", "high"]).sum()),
-            "Overdue": len(metrics.overdue(df, sla, datetime.now(timezone.utc))),
-            "Known exploited": progress["known_exploited"],
-        }
-
-    if summary:
-        helps = {
-            "Open findings": "Problems the latest scans still report, excluding info-level and false positives.",
-            "Critical or high": "Open findings rated critical or high by the scanner.",
-            "Overdue": "Open longer than the fix deadline for their severity ([sla_days] in config.toml).",
-            "Known exploited": "Open findings whose CVE is on CISA's Known Exploited Vulnerabilities list.",
-        }
-        icons = {"Open findings": ":material/bug_report:", "Critical or high": ":material/priority_high:",
-                 "Overdue": ":material/alarm:", "Known exploited": ":material/local_fire_department:"}
-        for col, (label, value) in zip(st.columns(4), summary.items()):
-            col.metric(label, value, help=helps[label], border=True, icon=icons[label])
+    progress, d = summary(settings, db_path)
+    if d is None or not progress["findings"]:
+        st.html(style.hero("No data yet", "No vulnerabilities on record yet.",
+                           "Bring in scan results to see how exposed you are.", None, "",
+                           dict.fromkeys(style.SEVERITY, 0)))
+    else:
+        severities = {c["severity"]: c["open"] for c in d.compliance}
+        exploited = d.now.known_exploited
+        headline = f"{d.now.open:,} open vulnerabilities." + (
+            f" {exploited} {'is' if exploited == 1 else 'are'} known to be exploited by attackers." if exploited else "")
+        scanned = f"last scan {d.last_scan:%b %d, %Y}" if d.last_scan else "no scans recorded"
+        source = "Demo data" if d.fake else "Live data"
+        st.html(style.hero(f"{source} · {scanned}", headline, d.status_reason, d.status, d.status_reason,
+                           severities))
+        st.html(style.kpis([
+            ("Open vulnerabilities", d.now.open, d.now.open - d.before.open, style.SIGNAL,
+             "Problems the latest scans still report, excluding info-level findings and false positives."),
+            ("Critical or high", d.now.critical_high, d.now.critical_high - d.before.critical_high,
+             style.SEVERITY["critical"], "Open findings rated critical or high by the scanner."),
+            ("Past deadline", d.now.overdue, d.now.overdue - d.before.overdue, "#B54708",
+             "Open longer than the fix deadline for their severity ([sla_days] in config.toml)."),
+            ("Known exploited", exploited, exploited - d.before.known_exploited, "#9E1C55",
+             "Open findings whose CVE is on CISA's Known Exploited Vulnerabilities list."),
+        ]))
 
     headline, why, key = next_step(progress, demo="demo-data" in pages)
-    with st.container(border=True):
+    with st.container(border=True, key="next-step"):
         st.markdown(f"#### :material/flag: Next step: {headline}")
         st.markdown(why)
         with st.container(horizontal=True):
@@ -83,12 +88,12 @@ def render(settings: Settings, db_path: Path, pages: dict):
     st.caption("Work left to right. Every step has its own page in the menu.")
     columns = st.columns(3) + st.columns(3)
     for col, (number, (group, text)) in zip(columns, enumerate(STEPS, 1)):
-        with col.container(border=True, height="stretch"):
+        with col.container(border=True, height="stretch", key=f"step-{group}"):
             st.markdown(f"**{number}. {GROUPS[group]}**")
             st.caption(text)
             for tool in (t for t in TOOLS if t.group == group and t.key in pages):
                 st.page_link(pages[tool.key], label=tool.title, icon=tool.icon)
-    with columns[len(STEPS)].container(border=True, height="stretch"):
+    with columns[len(STEPS)].container(border=True, height="stretch", key="step-settings"):
         st.markdown(f"**{GROUPS['settings']}**")
         st.caption("API keys, the automatic daily run, weekly reports, and demo data to practise on.")
         st.page_link(pages["setup"], label="Setup status", icon=":material/key:")

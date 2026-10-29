@@ -13,11 +13,8 @@ import altair as alt
 import streamlit as st
 
 from vmtoolkit.config import load_settings, production
-from vmtoolkit.dashboard import auth, history_page, home, metrics, reports_page, tools, tools_page
+from vmtoolkit.dashboard import auth, history_page, home, metrics, reports_page, style, tools, tools_page
 
-# Severity is ordered, so it uses one blue ramp light -> dark (validated for both themes)
-# instead of unrelated hues. Every bar also carries a text label.
-SEVERITY_COLORS = {"low": "#86b6ef", "medium": "#3987e5", "high": "#256abf", "critical": "#184f95"}
 SERIES = {"light": {"new": "#2a78d6", "fixed": "#eb6834", "surface": "#fcfcfb"},
           "dark": {"new": "#3987e5", "fixed": "#d95926", "surface": "#1a1a19"}}
 DB_LABELS = {"vmt.db": "Live data", "fake.db": "Demo data"}
@@ -39,7 +36,8 @@ def theme() -> dict:
 
 
 def severity_scale():
-    return alt.Scale(domain=metrics.SEVERITY_ORDER, range=[SEVERITY_COLORS[s] for s in metrics.SEVERITY_ORDER])
+    # Severity has one set of colors across the whole app (dashboard/style.py); every bar also has a label.
+    return alt.Scale(domain=metrics.SEVERITY_ORDER, range=[style.SEVERITY[s] for s in metrics.SEVERITY_ORDER])
 
 
 def overview(settings):
@@ -183,6 +181,7 @@ def main():
     args = parse_args()
     settings = load_settings(args.config, db=args.db)
     st.set_page_config(page_title="Vulnerability management", page_icon=":material/shield:", layout="wide")
+    style.apply()
     user = auth.require_login(settings)
     live = production()
 
