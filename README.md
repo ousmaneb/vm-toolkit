@@ -5,6 +5,9 @@ Every tool reads and writes the same SQLite database (`data/vmt.db` by default).
 
 Works on Windows, macOS and Linux with Python 3.10 or newer.
 
+To run it for a team in the cloud (Railway, Azure or AWS), see [DEPLOY.md](DEPLOY.md). The rest
+of this file covers running it on one computer.
+
 ## Setup
 
 ### macOS and Linux
@@ -1003,6 +1006,30 @@ Counts follow the dashboard: info-level findings and false positives are left ou
 start of the period are rebuilt from first-seen and fixed dates, so the first report already has a
 comparison. The patch plan and rankings come from the latest `vmt plan` and `vmt prioritize`, which
 `vmt daily` runs first. Reports from demo data carry a FAKE DATA watermark on every page.
+
+## Accounts, server mode and backups
+
+```sh
+vmt users add alice          # dashboard account; asks for the password
+vmt users list
+vmt users passwd alice       # new password; also clears a lockout
+vmt users remove alice
+vmt serve                    # dashboard + daily routine + backup, for containers
+vmt backup                   # dated copy of the database in data/backups/ (keeps 14)
+```
+
+**Sign-in:**
+
+- Once any account exists, the dashboard asks everyone to sign in. With `VMT_ENV=production` it
+  always does.
+- Passwords are stored as salted scrypt hashes and must be at least 12 characters.
+- Five wrong passwords lock an account for 15 minutes.
+- Sign-ins and every tool run are logged with the username.
+
+**`vmt serve`** runs the dashboard, plus `vmt daily` and `vmt backup` once a day at `[daily] time`.
+It is what the container runs; see [DEPLOY.md](DEPLOY.md).
+
+**Production mode:** `VMT_ENV=production` turns off demo data and hides the database picker.
 
 ## Fake data: `vmt fake-data`
 

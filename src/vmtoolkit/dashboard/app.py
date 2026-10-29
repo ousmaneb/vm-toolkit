@@ -4,6 +4,7 @@ Started by `vmt dashboard`, which passes --config and --db after `--`.
 """
 
 import argparse
+import logging
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,8 +12,8 @@ from pathlib import Path
 import altair as alt
 import streamlit as st
 
-from vmtoolkit.config import load_settings
-from vmtoolkit.dashboard import history_page, home, metrics, reports_page, tools, tools_page
+from vmtoolkit.config import load_settings, production
+from vmtoolkit.dashboard import auth, history_page, home, metrics, reports_page, tools, tools_page
 
 # Severity is ordered, so it uses one blue ramp light -> dark (validated for both themes)
 # instead of unrelated hues. Every bar also carries a text label.
@@ -182,6 +183,8 @@ def main():
     args = parse_args()
     settings = load_settings(args.config, db=args.db)
     st.set_page_config(page_title="Vulnerability management", page_icon=":material/shield:", layout="wide")
+    user = auth.require_login(settings)
+    live = production()
 
     def page(fn, title, icon, key, **kwargs):
         # Each page needs its own function name, so wrap the shared renderers in a named closure.
@@ -195,7 +198,9 @@ def main():
     pages["home"] = page(lambda: home.render(state["settings"], state["db"], pages), "Home", ":material/home:",
                          "home", default=True)
     pages["dashboard"] = page(lambda: overview(state["settings"]), "Dashboard", ":material/monitoring:", "dashboard")
-    for tool in tools_page.TOOLS:
+    # Demo data has no place in production.
+    shown_tools = [t for t in tools_page.TOOLS if not (live and t.key == "demo-data")]
+    for tool in shown_tools:
         pages[tool.key] = page(lambda tool=tool: tools_page.render_tool(tool, state["settings"], state["db"],
                                                                        state["offline"]),
                                tool.title, tool.icon, tool.key)
@@ -209,16 +214,21 @@ def main():
 
     sections = {"Overview": [pages["home"], pages["dashboard"], pages["history"], pages["reports"]]}
     for group, name in tools_page.GROUPS.items():
-        sections[name] = [pages[t.key] for t in tools_page.TOOLS if t.group == group]
+        sections[name] = [pages[t.key] for t in shown_tools if t.group == group]
     sections[tools_page.GROUPS["settings"]][:0] = [pages["setup"], pages["automation"]]
     nav = st.navigation(sections, expanded=True)
 
     with st.sidebar:
         st.markdown("**Data**")
-        choices = tools.database_choices(settings, settings.db_path)
-        db_path = st.selectbox("Database", choices, format_func=lambda p: db_label(p, settings.data_dir),
-                               help="Every page uses this database. 'Live data' is your real data.")
+        if live:
+            db_path = settings.data_dir / "vmt.db"
+        else:
+            choices = tools.database_choices(settings, settings.db_path)
+            db_path = st.selectbox("Database", choices, format_func=lambda p: db_label(p, settings.data_dir),
+                                   help="Every page uses this database. 'Live data' is your real data.")
         offline = st.toggle("Offline mode", help="Tools use only cached web data and make no network calls.")
+    if user:
+        auth.sign_out_button(user)
     state.update(settings=load_settings(args.config, db=db_path), db=db_path, offline=offline)
 
     if db_path.exists():
@@ -230,4 +240,5 @@ def main():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     main()

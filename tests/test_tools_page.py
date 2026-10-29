@@ -157,3 +157,13 @@ def test_history_page_rebuilds_and_looks_back(page, settings):
     assert [m.label for m in at.metric] == ["Open", "Critical or high", "Past deadline", "Actively exploited"]
     assert len(at.dataframe) == 3  # top risks, plan, all days
     assert at.get("download_button")[0].label == "Download history as CSV"
+
+
+@pytest.mark.parametrize("key", [t.key for t in tools_page.TOOLS] + ["setup", "reports", "automation", "history"])
+def test_every_page_renders_on_an_empty_database(settings, monkeypatch, key):
+    testing = pytest.importorskip("streamlit.testing.v1")
+    monkeypatch.setattr("vmtoolkit.schedule.status", lambda: "Not installed.")
+    from vmtoolkit import db
+    db.connect(settings.db_path).close()
+    monkeypatch.setattr("sys.argv", ["page", str(settings.base_dir / "config.toml"), str(settings.db_path), key])
+    assert not testing.AppTest.from_string(PAGE, default_timeout=60).run().exception

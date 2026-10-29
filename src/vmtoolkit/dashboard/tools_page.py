@@ -1,5 +1,6 @@
 """One page per tool: a short explanation, its options, and the output of the matching `vmt` command."""
 
+import logging
 import shlex
 import tempfile
 import time
@@ -386,6 +387,8 @@ def render_tool(tool: Tool, settings: Settings, db_path: Path, offline: bool):
         with st.expander("Run it from a terminal instead"):
             st.code(shlex.join(shown), language="bash")
         if clicked:
+            logging.getLogger("vmtoolkit.audit").info("%s ran: %s", st.session_state.get("user", "local user"),
+                                                      shlex.join(shown))
             output, code, seconds = execute(tools.base_command(settings, db_path, offline) + args, settings.base_dir)
             st.session_state.setdefault("runs", {})[tool.key] = (output, code, seconds, db_path.name)
 

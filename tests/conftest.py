@@ -17,7 +17,8 @@ SECRET_VARS = ("NESSUS_ACCESS_KEY", "NESSUS_SECRET_KEY", "NESSUS_USERNAME", "NES
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch):
-    for name in SECRET_VARS + ("VMT_CONFIG",):
+    for name in SECRET_VARS + ("VMT_CONFIG", "VMT_CONFIG_TOML", "VMT_DATA_DIR", "VMT_ENV", "NESSUS_CA_CERT",
+                                "VMT_ADMIN_USER", "VMT_ADMIN_PASSWORD"):
         monkeypatch.delenv(name, raising=False)
 
 

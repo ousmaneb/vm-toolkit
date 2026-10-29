@@ -60,7 +60,11 @@ def age_buckets(df: pd.DataFrame, now: datetime) -> pd.DataFrame:
 
 
 def overdue(df: pd.DataFrame, sla_days: dict[str, int], now: datetime) -> pd.DataFrame:
+    cols = ["machine", "severity", "title", "cves", "first_seen", "age_days", "deadline_days", "days_overdue", "why"]
     open_ = df[df.status == "open"].copy()
+    # An empty frame has no dtypes to do date arithmetic with (a fresh install has no findings yet).
+    if open_.empty:
+        return pd.DataFrame(columns=cols)
     open_["age_days"] = age_days(open_, now)
     open_["deadline_days"] = open_["severity"].astype(str).map(sla_days)
     late = open_[open_["age_days"] > open_["deadline_days"]].copy()
@@ -68,7 +72,6 @@ def overdue(df: pd.DataFrame, sla_days: dict[str, int], now: datetime) -> pd.Dat
     late["why"] = late.apply(
         lambda r: f"{r.severity} findings must be fixed within {r.deadline_days} days; "
                   f"this one has been open {r.age_days} days", axis=1)
-    cols = ["machine", "severity", "title", "cves", "first_seen", "age_days", "deadline_days", "days_overdue", "why"]
     return late.sort_values(["severity", "days_overdue"], ascending=[True, False])[cols].reset_index(drop=True)
 
 

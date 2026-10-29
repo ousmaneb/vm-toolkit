@@ -130,3 +130,14 @@ def test_next_step_follows_the_workflow():
 def test_progress_counts(small_db):
     p = metrics.progress(small_db)
     assert p["findings"] == 5 and p["machines"] == 1 and p["prioritized"] == 0 and p["known_exploited"] == 0
+
+
+def test_home_page_on_an_empty_database(tmp_path, monkeypatch):
+    """A fresh production deploy starts with no findings at all."""
+    testing = pytest.importorskip("streamlit.testing.v1")
+    db.connect(tmp_path / "vmt.db").close()
+    app = Path(metrics.__file__).parent / "app.py"
+    monkeypatch.setattr("sys.argv", ["app.py", "--db", str(tmp_path / "vmt.db")])
+    at = testing.AppTest.from_file(str(app), default_timeout=60).run()
+    assert not at.exception
+    assert [m.value for m in at.metric] == ["0", "0", "0", "0"]

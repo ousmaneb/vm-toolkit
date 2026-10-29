@@ -18,11 +18,12 @@ STEPS = [
 ]
 
 
-def next_step(progress: dict[str, int] | None) -> tuple[str, str, str]:
+def next_step(progress: dict[str, int] | None, demo: bool = True) -> tuple[str, str, str]:
     """(headline, why, page key) for the most useful thing to do next."""
     if not progress or not progress["findings"]:
         return ("Bring in your first scan results",
-                "The database has no findings yet. Import a scan file, or generate demo data to explore safely.",
+                "The database has no findings yet. Pull from Nessus or import a scan file"
+                + (", or generate demo data to explore safely." if demo else "."),
                 "import")
     if progress["unenriched"]:
         return ("Enrich your CVEs",
@@ -67,13 +68,13 @@ def render(settings: Settings, db_path: Path, pages: dict):
         for col, (label, value) in zip(st.columns(4), summary.items()):
             col.metric(label, value, help=helps[label], border=True, icon=icons[label])
 
-    headline, why, key = next_step(progress)
+    headline, why, key = next_step(progress, demo="demo-data" in pages)
     with st.container(border=True):
         st.markdown(f"#### :material/flag: Next step: {headline}")
         st.markdown(why)
         with st.container(horizontal=True):
             st.page_link(pages[key], label=f"Open {pages[key].title}", icon=":material/arrow_forward:")
-            if key == "import":
+            if key == "import" and "demo-data" in pages:
                 st.page_link(pages["demo-data"], label="Generate demo data", icon=":material/science:")
             else:
                 st.page_link(pages["reports"], label="Create a leadership report", icon=":material/picture_as_pdf:")
@@ -85,7 +86,7 @@ def render(settings: Settings, db_path: Path, pages: dict):
         with col.container(border=True, height="stretch"):
             st.markdown(f"**{number}. {GROUPS[group]}**")
             st.caption(text)
-            for tool in (t for t in TOOLS if t.group == group):
+            for tool in (t for t in TOOLS if t.group == group and t.key in pages):
                 st.page_link(pages[tool.key], label=tool.title, icon=tool.icon)
     with columns[len(STEPS)].container(border=True, height="stretch"):
         st.markdown(f"**{GROUPS['settings']}**")
@@ -93,4 +94,5 @@ def render(settings: Settings, db_path: Path, pages: dict):
         st.page_link(pages["setup"], label="Setup status", icon=":material/key:")
         st.page_link(pages["automation"], label="Automation", icon=":material/event_repeat:")
         st.page_link(pages["reports"], label="Reports", icon=":material/summarize:")
-        st.page_link(pages["demo-data"], label="Demo data", icon=":material/science:")
+        if "demo-data" in pages:
+            st.page_link(pages["demo-data"], label="Demo data", icon=":material/science:")

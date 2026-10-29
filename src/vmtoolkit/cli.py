@@ -24,6 +24,8 @@ classify_app = typer.Typer(no_args_is_help=True,
 app.add_typer(classify_app, name="classify")
 notes_app = typer.Typer(no_args_is_help=True, help="Your own notes about CVEs and findings (used by vmt triage).")
 app.add_typer(notes_app, name="notes")
+users_app = typer.Typer(no_args_is_help=True, help="Dashboard accounts.")
+app.add_typer(users_app, name="users")
 schedule_app = typer.Typer(no_args_is_help=True, help="Run `vmt daily` automatically every day.")
 app.add_typer(schedule_app, name="schedule")
 history_app = typer.Typer(no_args_is_help=True, help="Day-by-day history of your numbers, rankings and plans.")
@@ -272,7 +274,11 @@ def fake_data(
     force: bool = typer.Option(False, "--force", help="Replace an existing fake database."),
 ):
     """Generate a separate database of clearly labelled FAKE scan history for demos and testing."""
+    from .config import production
     from .fakedata import generate
+
+    if production():
+        raise ConfigError("Demo data is turned off in production (VMT_ENV=production).")
 
     settings = settings_from(ctx)
     path = out or settings.data_dir / "fake.db"
@@ -281,27 +287,111 @@ def fake_data(
     typer.echo(f"Use it with: vmt --db {path} dashboard")
 
 
-@app.command()
-def dashboard(ctx: typer.Context, port: int = typer.Option(8501, help="Port for the local web page.")):
-    """Start the dashboard on http://localhost:<port>: charts, plus a page to run every tool."""
-    import subprocess
+def _need_dashboard():
     from importlib.util import find_spec
 
     if find_spec("streamlit") is None:
         typer.echo('The dashboard needs extra packages: pip install -e ".[dashboard]"', err=True)
         raise typer.Exit(1)
-    settings = settings_from(ctx)
-    app_path = Path(__file__).parent / "dashboard" / "app.py"
-    cmd = [sys.executable, "-m", "streamlit", "run", str(app_path), "--server.port", str(port),
-           "--server.address", "localhost",
-           # Headless skips Streamlit's first-run email prompt, which would otherwise block here.
-           "--server.headless", "true", "--browser.gatherUsageStats", "false",
-           # Blue to match the charts, set per mode so the app still follows the system's light or dark setting.
-           "--theme.light.primaryColor", "#256abf", "--theme.dark.primaryColor", "#3987e5",
-           "--client.toolbarMode", "minimal", "--", "--db", str(settings.db_path)]
-    if (settings.base_dir / "config.toml").exists():
-        cmd += ["--config", str(settings.base_dir / "config.toml")]
-    raise typer.Exit(subprocess.call(cmd))
+
+
+@app.command()
+def dashboard(
+    ctx: typer.Context,
+    port: int = typer.Option(8501, help="Port for the web page."),
+    host: str = typer.Option("localhost", help="Address to listen on. Only change it behind sign-in and HTTPS."),
+):
+    """Start the dashboard on http://localhost:<port>: charts, plus a page to run every tool."""
+    import subprocess
+
+    from .serve import dashboard_command
+
+    _need_dashboard()
+    raise typer.Exit(subprocess.call(dashboard_command(settings_from(ctx), port, host)))
+
+
+@app.command()
+def serve(
+    ctx: typer.Context,
+    port: int = typer.Option(None, envvar="PORT", help="Port to listen on (default $PORT, else 8501)."),
+    host: str = typer.Option("0.0.0.0", help="Address to listen on."),
+):
+    """Run the dashboard, plus the daily routine and a backup at the daily time in config.toml. For containers."""
+    from .config import production
+    from .serve import serve as run
+
+    _need_dashboard()
+    if not production():
+        typer.echo("Warning: VMT_ENV isn't 'production', so the dashboard only asks for a password once an "
+                   "account exists. Create one with `vmt users add`.", err=True)
+    raise typer.Exit(run(settings_from(ctx), port or 8501, host))
+
+
+@app.command("backup")
+def backup_cmd(ctx: typer.Context, keep: int = typer.Option(14, help="How many dated copies to keep.")):
+    """Copy the database to data/backups/, keeping the newest copies. `vmt serve` does this daily."""
+    from .backup import backup
+
+    target, removed = backup(settings_from(ctx), keep=keep)
+    typer.echo(f"Backed up to {target}" + (f"; removed {len(removed)} older copies." if removed else "."))
+
+
+@users_app.command("add")
+def users_add(ctx: typer.Context, username: str = typer.Argument(...)):
+    """Create a dashboard account. Asks for the password twice."""
+    from .users import add_user
+
+    password = typer.prompt("Password", hide_input=True, confirmation_prompt=True)
+    conn = db.connect(settings_from(ctx).db_path)
+    try:
+        add_user(conn, username, password)
+    finally:
+        conn.close()
+    typer.echo(f"Created {username.strip().lower()}.")
+
+
+@users_app.command("passwd")
+def users_passwd(ctx: typer.Context, username: str = typer.Argument(...)):
+    """Set a new password for an account (also clears a lockout)."""
+    from .users import set_password
+
+    password = typer.prompt("New password", hide_input=True, confirmation_prompt=True)
+    conn = db.connect(settings_from(ctx).db_path)
+    try:
+        set_password(conn, username, password)
+    finally:
+        conn.close()
+    typer.echo(f"Password changed for {username.strip().lower()}.")
+
+
+@users_app.command("remove")
+def users_remove(ctx: typer.Context, username: str = typer.Argument(...)):
+    """Delete a dashboard account."""
+    from .users import remove_user
+
+    conn = db.connect(settings_from(ctx).db_path)
+    try:
+        typer.echo(f"Removed {username}." if remove_user(conn, username) else f"No user called {username}.")
+    finally:
+        conn.close()
+
+
+@users_app.command("list")
+def users_list(ctx: typer.Context):
+    """Show dashboard accounts and when each last signed in."""
+    from .users import list_users
+
+    conn = db.connect(settings_from(ctx).db_path)
+    try:
+        rows = list_users(conn)
+    finally:
+        conn.close()
+    if not rows:
+        typer.echo("No accounts yet. Create one with `vmt users add <name>`.")
+    for r in rows:
+        locked = f"  locked until {r['locked_until']}" if r["locked_until"] else ""
+        typer.echo(f"{r['username']:<24} created {r['created_at'][:10]}  last sign-in "
+                   f"{(r['last_login_at'] or 'never')[:16]}{locked}")
 
 
 @app.command("dedupe")

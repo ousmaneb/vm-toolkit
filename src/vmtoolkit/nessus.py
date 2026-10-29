@@ -46,23 +46,35 @@ class NessusClient:
         else:
             raise NessusError(
                 "No Nessus credentials found. Set NESSUS_ACCESS_KEY and NESSUS_SECRET_KEY "
-                "(or NESSUS_USERNAME and NESSUS_PASSWORD) in your .env file."
+                "(or NESSUS_USERNAME and NESSUS_PASSWORD) in .env or the environment."
             )
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "NessusClient":
         cfg = settings.section("nessus")
         verify: bool | str = bool(cfg.get("verify_tls", True))
+        pem = get_secret("NESSUS_CA_CERT")
         if cfg.get("ca_cert"):
             verify = str(settings.resolve(cfg["ca_cert"]))
+        elif pem:
+            # In containers the CA comes in as a secret; requests needs it as a file.
+            path = settings.data_dir / "nessus-ca.pem"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(pem.strip() + "\n", encoding="utf-8")
+            path.chmod(0o600)
+            verify = str(path)
         elif not verify:
             log.warning("TLS certificate checks for Nessus are turned off (nessus.verify_tls = false).")
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        return cls(
+        client = cls(
             cfg["url"], verify=verify,
             access_key=get_secret("NESSUS_ACCESS_KEY"), secret_key=get_secret("NESSUS_SECRET_KEY"),
             username=get_secret("NESSUS_USERNAME"), password=get_secret("NESSUS_PASSWORD"),
         )
+        if cfg.get("proxy"):
+            # For example Tailscale's userspace HTTP proxy, when Nessus is only reachable over the tailnet.
+            client.session.proxies = {"https": cfg["proxy"], "http": cfg["proxy"]}
+        return client
 
     def _request(self, method: str, path: str, **kwargs) -> requests.Response:
         try:
@@ -75,7 +87,7 @@ class NessusClient:
         except requests.exceptions.ConnectionError:
             raise NessusError(f"Could not connect to Nessus at {self.url}. Is it running?") from None
         if resp.status_code == 401:
-            raise NessusError("Nessus rejected the credentials (HTTP 401). Check your .env file.")
+            raise NessusError("Nessus rejected the credentials (HTTP 401). Check the Nessus keys in .env or the environment.")
         if resp.status_code >= 400:
             raise NessusError(f"Nessus returned HTTP {resp.status_code} for {method} {path}")
         return resp

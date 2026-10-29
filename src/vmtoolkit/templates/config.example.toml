@@ -38,7 +38,9 @@ epss_jump = 0.10
 deadline_warnings = true
 
 [daily]
-# What `vmt daily` does. Install it with `vmt schedule install`.
+# What `vmt daily` does. Install it with `vmt schedule install`, or run `vmt serve` in a container.
+# Local time `vmt serve` starts it each day (set the TZ environment variable in containers).
+time = "07:00"
 # Pull new results from Nessus first. Turn off if you only import files by hand.
 nessus = true
 # Search GitHub and news for your CVEs (about a minute per 10 CVEs without a GITHUB_TOKEN).

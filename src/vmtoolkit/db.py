@@ -332,6 +332,16 @@ CREATE TABLE IF NOT EXISTS plan_history (
     PRIMARY KEY (day, rank)
 );
 
+-- Dashboard sign-in. Passwords are salted scrypt hashes; failed counts drive the lockout.
+CREATE TABLE IF NOT EXISTS users (
+    username TEXT PRIMARY KEY,
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    last_login_at TEXT,
+    failed_logins INTEGER NOT NULL DEFAULT 0,
+    locked_until TEXT
+);
+
 -- One row per `vmt daily` run. A failed run is also sent as an alert.
 CREATE TABLE IF NOT EXISTS daily_runs (
     id INTEGER PRIMARY KEY,
