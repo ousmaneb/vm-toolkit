@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="240" viewBox="0 0 1180 240" role="img" aria-label="The daily routine in order: pull from Nessus, enrich, find duplicates, prioritize, patch plan, deadline forecast, save history, GitHub and news, back up, alerts, report on report day. If the pull fails, the routine skips the processing steps and goes straight to back up and alerts.">
+<style>
+  svg { --bg:#FFFFFF; --fg:#13233F; --muted:#5A6B85; --rule:#DCE3ED; --signal:#2F6FED; --tailnet:#0E8A7C;
+        --fail:#C4321F; --tint:rgba(47,111,237,0.07); --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace; }
+  @media (prefers-color-scheme: dark) {
+    svg { --bg:#121D33; --fg:#E3EAF5; --muted:#9AABC6; --rule:#2A3B58; --signal:#6B9BFF; --tailnet:#3CC7B5;
+          --fail:#FF7A66; --tint:rgba(107,155,255,0.10); }
+  }
+  .bg { fill: var(--bg); }
+  text { font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: var(--fg); }
+  .t { font-size: 13px; font-weight: 600; }
+  .s { font-size: 11px; fill: var(--muted); }
+  .lbl { font-size: 10.5px; fill: var(--muted); }
+  .head { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; fill: var(--muted); }
+  .box { fill: var(--bg); stroke: var(--rule); stroke-width: 1.5; }
+  .soft { fill: var(--tint); stroke: none; }
+  .group { fill: none; stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 6 5; }
+  .edge { fill: none; stroke: var(--fg); stroke-width: 1.5; opacity: 0.75; }
+  .edge.tn { stroke: var(--tailnet); opacity: 1; stroke-width: 2.2; }
+  .edge.web { stroke: var(--signal); opacity: 1; stroke-width: 2.2; }
+  .edge.fail { stroke: var(--fail); opacity: 1; stroke-width: 2; stroke-dasharray: 5 4; }
+  .chip { fill: var(--tint); stroke: var(--signal); stroke-width: 1; }
+  .chip.cond { stroke-dasharray: 4 3; }
+  .lane-tn { fill: var(--tailnet); } .lane-web { fill: var(--signal); } .lane-fail { fill: var(--fail); }
+  .mark { fill: var(--fg); opacity: 0.75; }
+</style>
+<rect class="bg" x="0" y="0" width="1180" height="240" rx="14"/>
+    <defs>
+      <marker id="parw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="mark"/></marker>
+      <marker id="parw-fail" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="lane-fail"/></marker>
+    </defs>
+    <!-- bracket over the steps a failed pull skips -->
+    <polyline points="116,34 116,26 844,26 844,34" class="edge"/>
+    <text x="480" y="18" class="lbl" text-anchor="middle">processing: skipped when the pull fails</text>
+
+    <g>
+      <rect x="10" y="44" width="92" height="58" rx="9" class="box"/><text x="56" y="69" class="s" text-anchor="middle" style="fill:var(--fg);font-weight:600">Pull</text><text x="56" y="86" class="s" text-anchor="middle">from Nessus</text>
+      <rect x="116" y="44" width="92" height="58" rx="9" class="box"/><text x="162" y="69" class="s" text-anchor="middle" style="fill:var(--fg);font-weight:600">Enrich</text><text x="162" y="86" class="s" text-anchor="middle">threat data</text>
+      <rect x="222" y="44" width="92" height="58" rx="9" class="box"/><text x="268" y="69" class="s" text-anchor="middle" style="fill:var(--fg);font-weight:600">Find</text><text x="268" y="86" class="s" text-anchor="middle">duplicates</text>
+      <rect x="328" y="44" width="92" height="58" rx="9" class="box"/><text x="374" y="69" class="s" text-anchor="middle" style="fill:var(--fg);font-weight:600">Prioritize</text><text x="374" y="86" class="s" text-anchor="middle">rank by risk</text>
+      <rect x="434" y="44" width="92" height="58" rx="9" class="box"/><text x="480" y="69" class="s" text-anchor="middle" style="fill:var(--fg);font-weight:600">Patch plan</text><text x="480" y="86" class="s" text-anchor="middle">fewest fixes</text>
+      <rect x="540" y="44" width="92" height="58" rx="9" class="box"/><text x="586" y="69" class="s" text-anchor="middle" style="fill:var(--fg);font-weight:600">Forecast</text><text x="586" y="86" class="s" text-anchor="middle">deadline misses</text>
+      <rect x="646" y="44" width="92" height="58" rx="9" class="box"/><text x="692" y="69" class="s" text-anchor="middle" style="fill:var(--fg);font-weight:600">History</text><text x="692" y="86" class="s" text-anchor="middle">daily snapshot</text>
+      <rect x="752" y="44" width="92" height="58" rx="9" class="box"/><text x="798" y="69" class="s" text-anchor="middle" style="fill:var(--fg);font-weight:600">GitHub</text><text x="798" y="86" class="s" text-anchor="middle">&amp; news</text>
+      <rect x="858" y="44" width="92" height="58" rx="9" class="box"/><text x="904" y="69" class="s" text-anchor="middle" style="fill:var(--fg);font-weight:600">Back up</text><text x="904" y="86" class="s" text-anchor="middle">+ off-site copy</text>
+      <rect x="964" y="44" width="92" height="58" rx="9" class="box"/><text x="1010" y="69" class="s" text-anchor="middle" style="fill:var(--fg);font-weight:600">Alerts</text><text x="1010" y="86" class="s" text-anchor="middle">incl. failures</text>
+      <rect x="1070" y="44" width="92" height="58" rx="9" class="box" style="stroke-dasharray:4 3"/><text x="1116" y="69" class="s" text-anchor="middle" style="fill:var(--fg);font-weight:600">Report</text><text x="1116" y="86" class="s" text-anchor="middle">on report day</text>
+    </g>
+    <g>
+      <line x1="102" y1="73" x2="113" y2="73" class="edge" marker-end="url(#parw)"/>
+      <line x1="208" y1="73" x2="219" y2="73" class="edge" marker-end="url(#parw)"/>
+      <line x1="314" y1="73" x2="325" y2="73" class="edge" marker-end="url(#parw)"/>
+      <line x1="420" y1="73" x2="431" y2="73" class="edge" marker-end="url(#parw)"/>
+      <line x1="526" y1="73" x2="537" y2="73" class="edge" marker-end="url(#parw)"/>
+      <line x1="632" y1="73" x2="643" y2="73" class="edge" marker-end="url(#parw)"/>
+      <line x1="738" y1="73" x2="749" y2="73" class="edge" marker-end="url(#parw)"/>
+      <line x1="844" y1="73" x2="855" y2="73" class="edge" marker-end="url(#parw)"/>
+      <line x1="950" y1="73" x2="961" y2="73" class="edge" marker-end="url(#parw)"/>
+      <line x1="1056" y1="73" x2="1067" y2="73" class="edge" marker-end="url(#parw)"/>
+    </g>
+    <!-- failure path -->
+    <polyline points="56,102 56,160 904,160 904,106" class="edge fail" marker-end="url(#parw-fail)"/>
+    <text x="480" y="182" class="lbl" text-anchor="middle" style="fill:var(--fail)">pull fails: skip the processing, still back up, then alert with what went wrong</text>
+    <text x="1116" y="124" class="lbl" text-anchor="middle">skipped if any</text>
+    <text x="1116" y="138" class="lbl" text-anchor="middle">step failed</text>
+    <text x="10" y="222" class="lbl">Every step's output goes to logs/daily-&lt;date&gt;.log, and every run is recorded in the daily_runs table and on the Automation page.</text>
+  </svg>

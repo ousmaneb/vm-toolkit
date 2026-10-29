@@ -5,6 +5,21 @@ Every tool reads and writes the same SQLite database (`data/vmt.db` by default).
 
 Works on Windows, macOS and Linux with Python 3.11 or newer.
 
+## Architecture
+
+![System diagram: scan files, Nessus over Tailscale, threat feeds, GitHub and news, and an optional AI provider feed one service. Inside it, vmt serve runs the dashboard and a scheduler, both run vmt commands, and the commands read and write the /data volume. The service reaches the team over HTTPS with sign-in, alert channels, CEO and CISO reports, ticketing and off-site backups.](docs/architecture.svg)
+
+Everything runs in one service. `vmt serve` hosts the dashboard and a scheduler; both run the same
+`vmt` commands, each in its own process, and every command reads and writes one SQLite database on
+the `/data` volume. The only way in from the internet is the team's HTTPS connection to the
+dashboard, behind sign-in. Nessus is reached over a private Tailscale network.
+
+![The daily routine: pull from Nessus, enrich, find duplicates, prioritize, patch plan, forecast, save history, GitHub and news, back up, alerts, and the report on report day. If the pull fails, the routine skips the processing steps, still backs up, and sends an alert.](docs/daily-routine.svg)
+
+Once a day the scheduler runs `vmt daily`. If the Nessus pull fails, it skips the steps that would
+only re-process yesterday's data, still backs up, and alerts you instead of writing a report. The
+weekly report only goes out after a clean run.
+
 To run it for a team in the cloud (Railway, Azure or AWS), see [DEPLOY.md](DEPLOY.md). The rest
 of this file covers running it on one computer.
 
