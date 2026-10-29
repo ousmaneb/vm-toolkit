@@ -1,8 +1,7 @@
 """The dashboard's look: fonts, colors and the home page's hero.
 
-Colors are fixed meanings: the severity colors are only ever used for severity, the step colors only
-for workflow stages. Tints are rgba so the same CSS reads in light and dark mode. Every value that
-comes from the database is escaped before it goes into HTML.
+Colors come from palette.py. Tints are rgba so the same CSS reads in light and dark mode. Every value
+that comes from the database is escaped before it goes into HTML.
 """
 
 import mimetypes
@@ -10,15 +9,11 @@ from html import escape
 
 import streamlit as st
 
+from vmtoolkit.palette import BETTER, INK, SEVERITY, SIGNAL, STATUS, STEPS, WORSE
+
 # Slim Linux images have no .woff2 entry, so the fonts would be served as octet-stream.
 mimetypes.add_type("font/woff2", ".woff2")
 
-INK = "#0B1F3A"
-SIGNAL = "#2F6FED"
-SEVERITY = {"critical": "#D92D20", "high": "#F2741C", "medium": "#E8B10C", "low": "#12A594"}
-STATUS = {"red": ("#D92D20", "Action needed"), "amber": ("#E8B10C", "Watch"), "green": ("#12A594", "On track")}
-STEPS = {"data": "#2F6FED", "risk": "#E8590C", "fix": "#12A594", "intel": "#7A5AF8", "ai": "#C11574",
-         "settings": "#64748B"}
 
 FONTS = "app/static/fonts"
 CSS = f"""
@@ -67,7 +62,7 @@ a:focus-visible, button:focus-visible {{ outline: 2px solid {SIGNAL}; outline-of
 .vmt-kpi__value {{ font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 2rem; font-weight: 500;
   line-height: 1.2; margin: 4px 0 2px; }}
 .vmt-kpi__delta {{ font-size: 0.82rem; opacity: 0.85; }}
-.vmt-up {{ color: #D92D20; }} .vmt-down {{ color: #12A594; }}
+.vmt-up {{ color: {WORSE}; }} .vmt-down {{ color: {BETTER}; }}
 
 [class*="st-key-step-"] {{ border-top: 4px solid var(--step) !important; border-radius: 12px !important; }}
 """ + "".join(f".st-key-step-{key} {{ --step: {color}; }}\n" for key, color in STEPS.items()) + """

@@ -8,7 +8,7 @@ from xml.sax.saxutils import escape
 
 from reportlab.graphics.charts.legends import Legend
 from reportlab.graphics.charts.linecharts import HorizontalLineChart
-from reportlab.graphics.shapes import Drawing
+from reportlab.graphics.shapes import Drawing, Rect, String
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_RIGHT
 from reportlab.lib.pagesizes import letter
@@ -17,20 +17,24 @@ from reportlab.lib.units import inch
 from reportlab.platypus import (KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table,
                                 TableStyle)
 
+from . import palette
 from .report import GLOSSARY, LOOKBACK_DAYS, ReportData, period_name
 
 INK = colors.HexColor("#1f2328")
 MUTED = colors.HexColor("#59636e")
 RULE = colors.HexColor("#d0d7de")
 SHADE = colors.HexColor("#f6f8fa")
-NAVY = colors.HexColor("#184f95")
-BLUE = colors.HexColor("#3987e5")
+NAVY = colors.HexColor(palette.INK)
+BLUE = colors.HexColor(palette.SIGNAL)
+SEVERITY = {sev: colors.HexColor(c) for sev, c in palette.SEVERITY.items()}
+# Status text and border use darker shades of the dashboard's status colors, so they stay readable on
+# their light tint when printed.
 STATUS = {
-    "red": (colors.HexColor("#b42318"), colors.HexColor("#fef3f2"), "Action needed"),
-    "amber": (colors.HexColor("#b54708"), colors.HexColor("#fffaeb"), "Watch"),
-    "green": (colors.HexColor("#067647"), colors.HexColor("#ecfdf3"), "On track"),
+    "red": (colors.HexColor("#B42318"), colors.HexColor("#FEF3F2"), palette.STATUS["red"][1]),
+    "amber": (colors.HexColor("#93370D"), colors.HexColor("#FFFAEB"), palette.STATUS["amber"][1]),
+    "green": (colors.HexColor("#0E7C70"), colors.HexColor("#ECFDF3"), palette.STATUS["green"][1]),
 }
-GOOD, BAD = colors.HexColor("#067647"), colors.HexColor("#b42318")
+GOOD, BAD = colors.HexColor(palette.BETTER), colors.HexColor(palette.WORSE)
 
 WIDTH = letter[0] - 1.5 * inch
 
@@ -106,8 +110,31 @@ def kpis(d: ReportData) -> Table:
     return t
 
 
+def severity_bar(d: ReportData) -> Drawing:
+    """Open vulnerabilities split by severity, in the same colors as the dashboard's exposure bar."""
+    counts = [(c["severity"], c["open"]) for c in d.compliance]
+    total = sum(n for _, n in counts)
+    drawing = Drawing(WIDTH, 30)
+    drawing.hAlign = "CENTER"  # same as the tables above it
+    x = 0.0
+    for sev, n in counts:
+        if total and n:
+            width = WIDTH * n / total
+            drawing.add(Rect(x, 16, width, 9, fillColor=SEVERITY[sev], strokeColor=None))
+            x += width
+    if not total:
+        drawing.add(Rect(0, 16, WIDTH, 9, fillColor=RULE, strokeColor=None))
+    x = 0.0
+    for sev, n in counts:
+        drawing.add(Rect(x, 2, 7, 7, fillColor=SEVERITY[sev], strokeColor=None))
+        label = f"{sev.capitalize()} {n:,}"
+        drawing.add(String(x + 11, 2, label, fontName="Helvetica", fontSize=8.5, fillColor=INK))
+        x += 11 + len(label) * 5 + 22
+    return drawing
+
+
 def trend_chart(d: ReportData) -> Drawing:
-    width, height = WIDTH, 1.75 * inch
+    width, height = WIDTH, 1.45 * inch
     drawing = Drawing(width, height)
     chart = HorizontalLineChart()
     chart.x, chart.y, chart.width, chart.height = 34, 30, width - 44, height - 52
@@ -122,14 +149,14 @@ def trend_chart(d: ReportData) -> Drawing:
     chart.valueAxis.visibleGrid = True
     chart.valueAxis.gridStrokeWidth = 0.4
     chart.lines[0].strokeColor, chart.lines[0].strokeWidth = BLUE, 2
-    chart.lines[1].strokeColor, chart.lines[1].strokeWidth = NAVY, 2
+    chart.lines[1].strokeColor, chart.lines[1].strokeWidth = SEVERITY["critical"], 2
     drawing.add(chart)
     legend = Legend()
     legend.x, legend.y = 34, height - 4
     legend.fontName, legend.fontSize, legend.fillColor = "Helvetica", 8, INK
     legend.columnMaximum, legend.deltax, legend.dxTextSpace = 1, 150, 4
     legend.alignment = "right"
-    legend.colorNamePairs = [(BLUE, "All open"), (NAVY, "Critical or high")]
+    legend.colorNamePairs = [(BLUE, "All open"), (SEVERITY["critical"], "Critical or high")]
     drawing.add(legend)
     return drawing
 
@@ -141,7 +168,7 @@ def summary_page(d: ReportData, audience: str) -> list:
           title),
         p(f"Period {d.period_start:%b %d} to {d.period_end:%b %d, %Y}. Prepared for the "
           f"{'CEO' if audience == 'ceo' else 'CISO'}.", subtitle),
-        status_banner(d), Spacer(1, 10), kpis(d),
+        status_banner(d), Spacer(1, 10), kpis(d), Spacer(1, 8), severity_bar(d),
         p("Summary", h2), *[Paragraph(escape(s), bullet, bulletText="•") for s in d.summary],
         p("Open vulnerabilities, last 12 weeks", h2), trend_chart(d),
     ]
