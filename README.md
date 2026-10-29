@@ -1023,7 +1023,9 @@ vmt backup                   # dated copy of the database in data/backups/ (keep
 - Once any account exists, the dashboard asks everyone to sign in. With `VMT_ENV=production` it
   always does.
 - Passwords are stored as salted scrypt hashes and must be at least 12 characters.
-- Five wrong passwords lock an account for 15 minutes.
+- Five wrong passwords lock an account for 15 minutes, and twenty failed sign-ins from one address
+  block that address for 15 minutes.
+- A sign-in lasts 8 hours across reloads, until you sign out or your password changes.
 - Sign-ins and every tool run are logged with the username.
 
 **`vmt serve`** runs the dashboard, plus `vmt daily` and `vmt backup` once a day at `[daily] time`.

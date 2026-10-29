@@ -12,6 +12,7 @@ from .config import ConfigError
 from .db import parse_iso, to_iso, utcnow
 
 MIN_LENGTH = 12
+SESSION = timedelta(hours=8)
 MAX_FAILURES = 5
 LOCKOUT = timedelta(minutes=15)
 SCRYPT = {"n": 2 ** 14, "r": 8, "p": 1}
@@ -60,9 +61,11 @@ def set_password(conn: sqlite3.Connection, username: str, password: str) -> None
                                "WHERE username = ?", (hash_password(password), username)).rowcount
     if not changed:
         raise ConfigError(f"No user called {username}.")
+    end_sessions(conn, username)
 
 
 def remove_user(conn: sqlite3.Connection, username: str) -> bool:
+    end_sessions(conn, username)
     with conn:
         return conn.execute("DELETE FROM users WHERE username = ?", (username.strip().lower(),)).rowcount > 0
 
@@ -106,3 +109,39 @@ def bootstrap(conn: sqlite3.Connection) -> str | None:
         return None
     add_user(conn, username, password)
     return f"Created the first dashboard account, {username.strip().lower()}. You can remove VMT_ADMIN_PASSWORD now."
+
+
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def start_session(conn: sqlite3.Connection, username: str) -> str:
+    """A new random session token. The browser keeps the token; the database keeps only its hash."""
+    token = secrets.token_urlsafe(32)
+    now = parse_iso(utcnow())
+    with conn:
+        conn.execute("DELETE FROM sessions WHERE expires_at < ?", (to_iso(now),))
+        conn.execute("INSERT INTO sessions (token_hash, username, created_at, expires_at) VALUES (?, ?, ?, ?)",
+                     (_token_hash(token), username, to_iso(now), to_iso(now + SESSION)))
+    return token
+
+
+def session_user(conn: sqlite3.Connection, token: str | None) -> str | None:
+    if not token:
+        return None
+    row = conn.execute("SELECT username, expires_at FROM sessions WHERE token_hash = ?",
+                       (_token_hash(token),)).fetchone()
+    if row is None or parse_iso(row["expires_at"]) <= parse_iso(utcnow()):
+        return None
+    return row["username"]
+
+
+def end_session(conn: sqlite3.Connection, token: str | None) -> None:
+    if token:
+        with conn:
+            conn.execute("DELETE FROM sessions WHERE token_hash = ?", (_token_hash(token),))
+
+
+def end_sessions(conn: sqlite3.Connection, username: str) -> None:
+    with conn:
+        conn.execute("DELETE FROM sessions WHERE username = ?", (username.strip().lower(),))

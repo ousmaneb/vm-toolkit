@@ -342,6 +342,14 @@ CREATE TABLE IF NOT EXISTS users (
     locked_until TEXT
 );
 
+-- Dashboard sign-in sessions, so a reload doesn't sign people out. Only a hash of the token is stored.
+CREATE TABLE IF NOT EXISTS sessions (
+    token_hash TEXT PRIMARY KEY,
+    username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+
 -- One row per `vmt daily` run. A failed run is also sent as an alert.
 CREATE TABLE IF NOT EXISTS daily_runs (
     id INTEGER PRIMARY KEY,

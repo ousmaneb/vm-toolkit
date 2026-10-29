@@ -228,7 +228,7 @@ def main():
                                    help="Every page uses this database. 'Live data' is your real data.")
         offline = st.toggle("Offline mode", help="Tools use only cached web data and make no network calls.")
     if user:
-        auth.sign_out_button(user)
+        auth.sign_out_button(user, settings)
     state.update(settings=load_settings(args.config, db=db_path), db=db_path, offline=offline)
 
     if db_path.exists():

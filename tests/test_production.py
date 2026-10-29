@@ -111,3 +111,45 @@ def test_dashboard_requires_sign_in_in_production(settings, monkeypatch):
     at.text_input[1].input("wrong-password-123")
     at.button[0].click().run()
     assert at.error[0].value == WRONG and at.title[0].value == "Sign in"
+
+
+def test_sessions_survive_reloads_and_end_cleanly(conn, monkeypatch):
+    from vmtoolkit import users
+
+    add_user(conn, "alice", GOOD)
+    token = users.start_session(conn, "alice")
+    assert users.session_user(conn, token) == "alice"
+    assert token not in str(conn.execute("SELECT * FROM sessions").fetchall()[0][:])  # only a hash is stored
+    assert users.session_user(conn, "made-up-token") is None and users.session_user(conn, None) is None
+    users.end_session(conn, token)
+    assert users.session_user(conn, token) is None
+
+    token = users.start_session(conn, "alice")
+    set_password(conn, "alice", "a-brand-new-password")  # a new password signs everyone out
+    assert users.session_user(conn, token) is None
+
+    token = users.start_session(conn, "alice")
+    monkeypatch.setattr(users, "utcnow", lambda: "2999-01-01T00:00:00Z")
+    assert users.session_user(conn, token) is None  # expired
+
+
+def test_sign_in_throttle_per_address():
+    from vmtoolkit.dashboard.auth import Throttle
+
+    throttle = Throttle(limit=3, window=60)
+    for t in (0, 1, 2):
+        assert not throttle.blocked("198.51.100.7", now=t)
+        throttle.failed("198.51.100.7", now=t)
+    assert throttle.blocked("198.51.100.7", now=3)
+    assert not throttle.blocked("198.51.100.8", now=3)
+    assert not throttle.blocked("198.51.100.7", now=63)  # the window has passed
+
+
+def test_client_address_behind_a_proxy(monkeypatch):
+    from vmtoolkit.dashboard.auth import client_address
+
+    # The client can put anything at the start of the header; the proxy appends the real address last.
+    assert client_address({"X-Forwarded-For": "1.2.3.4, 198.51.100.7"}, "10.0.0.2") == "198.51.100.7"
+    monkeypatch.setenv("VMT_PROXY_HOPS", "2")
+    assert client_address({"X-Forwarded-For": "1.2.3.4, 198.51.100.7, 10.0.0.9"}, "10.0.0.2") == "198.51.100.7"
+    assert client_address({}, "192.0.2.5") == "192.0.2.5"

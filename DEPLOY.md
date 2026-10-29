@@ -35,6 +35,7 @@ Nothing about your environment goes in the repository. The repository is public,
 | `NVD_API_KEY`, `GITHUB_TOKEN` | no | Faster NVD lookups and GitHub searches. |
 | `JIRA_EMAIL`, `JIRA_API_TOKEN`, `SN_USERNAME`, `SN_PASSWORD` | no | Only to push tickets. |
 | `PORT` | set by the platform | Port the dashboard listens on (default 8501). |
+| `VMT_PROXY_HOPS` | no | How many proxies sit in front of the app (default 1: Railway's edge, or one load balancer). Used to find each visitor's address in `X-Forwarded-For`. |
 
 Example `VMT_CONFIG_TOML`:
 
@@ -116,8 +117,13 @@ How sign-in works:
 
 - Passwords must be at least 12 characters and are stored as salted scrypt hashes.
 - Five wrong passwords lock the account for 15 minutes.
-- A session lasts up to 8 hours. Reloading the browser tab asks you to sign in again.
-- Sign-ins, failed sign-ins and every tool run (with the username) are written to the service log.
+- Twenty failed sign-ins from one address within 15 minutes block that address for the rest of the
+  window, whatever usernames were tried. A restart clears the block.
+- A session lasts 8 hours, across reloads and tabs. It ends when you sign out, when your password
+  changes, or when your account is removed. The browser keeps a random token in a `SameSite=Strict`
+  cookie (marked `Secure` over HTTPS); the database keeps only its hash.
+- Sign-ins, failed sign-ins (with the address) and every tool run (with the username) are written to
+  the service log.
 
 **Updating.** Push to GitHub and Railway redeploys. The volume, and with it all data and history,
 is kept.
