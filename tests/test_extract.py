@@ -127,3 +127,57 @@ def test_label_paragraphs_and_comparison_ranges():
     text = "CVE-2099-0006 (critical): FAKE path traversal\n\nAffects\n\n>=2.4.7, <=2.4.51\n\nFixed in FakeHTTPd Server 2.4.52"
     values = {(i.kind, i.value) for i in ex.extract_rules(text, "x", "x").items}
     assert values == {("affected", "2.4.7 through 2.4.51"), ("fixed", "2.4.52")}
+
+
+# The layout of Apache's per-version advisory pages: a "Fixed in" heading above the CVEs it fixed,
+# and alias notes inside a CVE's section.
+VERSION_PAGE = """Fixed in FakeHTTPd 2.4.3
+
+CVE-2099-0101 (low): FAKE XSS in mod_fake
+
+Possible XSS in mod_fake.
+
+Note: This issue is also known as CVE-2098-0055.
+
+Update 2.4.3 released
+
+Affects 2.4.2, 2.4.1
+
+Fixed in FakeHTTPd 2.4.2
+
+Released 2099-04-17 · 1 CVE: 1 low
+
+CVE-2099-0202 (low): FAKE path handling
+
+Affects 2.4.1
+"""
+
+
+def test_alias_notes_do_not_take_over_the_section():
+    result = ex.extract_rules(VERSION_PAGE, "x", "x")
+    facts = {(i.cve, i.kind, i.value) for i in result.items}
+    assert ("CVE-2099-0101", "affected", "2.4.2, 2.4.1") in facts
+    assert not any(i.cve == "CVE-2098-0055" for i in result.items)
+
+
+def test_fixed_in_headings_apply_to_the_cves_below_them():
+    facts = {(i.cve, i.kind, i.value) for i in ex.extract_rules(VERSION_PAGE, "x", "x").items}
+    assert ("CVE-2099-0101", "fixed", "2.4.3") in facts
+    assert ("CVE-2099-0202", "fixed", "2.4.2") in facts
+    # The 2.4.2 heading comes after CVE-2099-0101's section and must not be credited to it.
+    assert ("CVE-2099-0101", "fixed", "2.4.2") not in facts
+
+
+def test_cross_references_inside_an_entry_stay_with_that_entry():
+    page = ("CVE-2099-0301 (critical): FAKE traversal\n\nIt was found that the fix for CVE-2099-0300 in FakeHTTPd "
+            "2.4.50 was insufficient.\n\nAffects 2.4.50, 2.4.49\n\n"
+            "CVE-2099-0300 (high): FAKE traversal\n\nAffects 2.4.49\n")
+    facts = {(i.cve, i.kind, i.value) for i in ex.extract_rules(page, "x", "x").items}
+    assert ("CVE-2099-0301", "affected", "2.4.50, 2.4.49") in facts
+    assert not any(cve == "CVE-2099-0300" and "2.4.50" in value for cve, _, value in facts)
+    assert ("CVE-2099-0300", "affected", "2.4.49") in facts
+
+
+def test_affects_keeps_every_listed_version():
+    result = ex.extract_rules("CVE-2099-0401: FAKE bug. Affects 2.4.50, 2.4.49.", "x", "x")
+    assert [(i.kind, i.value) for i in result.items] == [("affected", "2.4.50, 2.4.49")]

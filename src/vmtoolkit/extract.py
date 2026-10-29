@@ -25,7 +25,7 @@ AFFECTED_PATTERNS = [
     re.compile(rf"\b(?:up to(?: and including)?|through|<=)\s+(?:version\s+)?({VERSION})", re.I),
     re.compile(rf"({VERSION})\s+and\s+(?:earlier|prior|below)", re.I),
     # Last, so a range like "Affects: 2.4.0 through 2.4.58" is caught by the range pattern first.
-    re.compile(rf"\baffects?:?\s+(?:versions?\s+)?({VERSION})", re.I),
+    re.compile(rf"\baffects?:?\s+(?:versions?\s+)?({VERSION}(?:,\s*{VERSION})*)", re.I),
 ]
 FIXED_PATTERNS = [
     # Up to four product words may sit between "fixed in" and the version: "Fixed in Apache HTTP Server 2.4.51".
@@ -33,7 +33,18 @@ FIXED_PATTERNS = [
                rf"(?:version\s+)?({VERSION})", re.I),
     re.compile(rf"\b(?:upgrade|update)\s+to\s+(?:version\s+)?({VERSION})", re.I),
     re.compile(rf"({VERSION})\s+(?:or later|and later|or newer|or above|or higher)\b", re.I),
+    # Release notes: "Update 2.4.3 released".
+    re.compile(rf"\bupdate\s+({VERSION})\s+released\b", re.I),
 ]
+# A heading on its own, like "Fixed in Apache HTTP Server 2.4.2": it applies to the CVEs listed under it.
+# It names a product and has no full stop; "Fixed in 1.5." inside a CVE's section is an ordinary sentence.
+FIXED_HEADING_RE = re.compile(rf"^(?:fixed|patched|resolved) in\s+(?:[A-Za-z][\w-]*\s+){{1,4}}"
+                              rf"(?:version\s+)?(\d+(?:\.\d+)+[\w-]*)$", re.I)
+# The first line of an entry on pages that list one entry per CVE: "CVE-2021-42013 (critical): Path traversal".
+ENTRY_RE = re.compile(r"^(CVE-\d{4}-\d{4,})\s*(?:\([^)]*\))?\s*[:\u2013-]", re.I)
+# "This issue is also known as CVE-..." names another ID for the CVE being described, not a new one.
+ALIAS_RE = re.compile(r"\b(?:also known as|a\.?k\.?a\.?|also (?:tracked|referred to) as|duplicate of|"
+                      r"previously (?:known|tracked) as|formerly)\b", re.I)
 # Checked in order; the first match in a sentence wins.
 EXPLOITATION_PATTERNS = [
     ("not_known_exploited", re.compile(r"\b(?:not aware of any|no (?:known|reports of)|is not known to be)\b[^.]*"
@@ -179,7 +190,8 @@ def _affected(m: re.Match) -> str:
     if re.search(r"before|prior|earlier|older|below", m.group(0), re.I):
         return f"before {versions[0]}"
     if re.match(r"affects?", m.group(0), re.I):
-        return versions[0]
+        # "Affects 2.4.50, 2.4.49" lists every affected version.
+        return ", ".join(_version(v.strip()) for v in versions[0].split(","))
     return f"up to {versions[0]}"
 
 
@@ -187,13 +199,30 @@ def extract_rules(text: str, source: str, title: str) -> Extraction:
     cves = sorted({c.upper() for c in CVE_RE.findall(text)})
     result = Extraction(source=source, title=title, method="rules", cves=cves)
     current: list[str] = []
-    for sentence in sentences(text):
+    heading: tuple[str, str] | None = None  # (fixed version, heading text) for the CVEs listed under it
+    parts = sentences(text)
+    # On pages that list one entry per CVE, only an entry line starts a new CVE. A CVE named anywhere else
+    # ("the fix for CVE-2021-41773 was insufficient") is a cross-reference within the current entry.
+    entries = sum(1 for p in parts if ENTRY_RE.match(p)) >= 2
+    for n, sentence in enumerate(parts):
         named = sorted({c.upper() for c in CVE_RE.findall(sentence)})
+        # "Fixed in <product> <version>" is a heading for the CVEs below it when one follows within two
+        # sentences; at the end of a CVE's own section it is just that CVE's fixed version.
+        m = None if named else FIXED_HEADING_RE.match(sentence)
+        if m and any(CVE_RE.search(after) for after in parts[n + 1:n + 3]):
+            heading, current = (_version(m.group(1)), sentence), []
+            continue
+        if named and entries and (entry := ENTRY_RE.match(sentence)):
+            named = [entry.group(1).upper()]
+        elif named and current and (entries or ALIAS_RE.search(sentence)):
+            named = []  # an alias or cross-reference belongs to the entry already being described
         # A sentence that names no CVE belongs to the CVEs named most recently before it, which is
         # how advisories lay out per-CVE sections. Text before the first CVE applies to all of them.
         if named:
             current = named
             targets, scope = named, "sentence"
+            if heading:
+                result.items += [Item(cve, "fixed", heading[0], heading[1], "section") for cve in named]
         elif current:
             targets, scope = current, "section"
         elif len(cves) <= DOCUMENT_WIDE_MAX:
