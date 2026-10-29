@@ -9,6 +9,7 @@ from pathlib import Path
 
 import requests
 
+from .acceptance import expiry_alerts
 from .config import ConfigError, Settings, get_secret
 from .db import utcnow
 
@@ -130,6 +131,10 @@ def run_alerts(conn: sqlite3.Connection, settings: Settings, dry_run: bool = Fal
     # Spikes found by `vmt monitor` (run it before `vmt alert`).
     alerts += [Alert(key=f"chatter:{r['cve']}:{r['day']}", cve=r["cve"], message=r["explanation"])
                for r in conn.execute("SELECT * FROM chatter_spikes ORDER BY day, cve")]
+    alerts += [Alert(key=key, cve="", message=message) for key, message in expiry_alerts(conn)]
+    from .inventory import stale_alerts
+
+    alerts += [Alert(key=key, cve="", message=message) for key, message in stale_alerts(conn, settings)]
     # Failed `vmt daily` runs from the last week; older ones would be stale news to a newly added channel.
     alerts += [Alert(key=f"daily-run:{r['id']}", cve="", message=r["message"])
                for r in conn.execute("""SELECT id, message FROM daily_runs WHERE status = 'failed'

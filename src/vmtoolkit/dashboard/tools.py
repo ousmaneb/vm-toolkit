@@ -50,8 +50,10 @@ def base_command(settings: Settings, db_path: Path, offline: bool) -> list[str]:
     return cmd
 
 
-def run(cmd: list[str], cwd: Path, on_line: Callable[[str], None]) -> int:
+def run(cmd: list[str], cwd: Path, on_line: Callable[[str], None], user: str | None = None) -> int:
     env = dict(os.environ, NO_COLOR="1", TERM="dumb", COLUMNS="160", PYTHONUNBUFFERED="1")
+    if user:
+        env["VMT_USER"] = user  # so records like risk acceptances name the person, not the service account
     proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, encoding="utf-8", errors="replace")
     try:

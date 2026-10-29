@@ -18,6 +18,9 @@ config, db, key = sys.argv[1], Path(sys.argv[2]), sys.argv[3]
 settings = load_settings(Path(config), db=db)
 if key == "setup":
     tools_page.render_setup(settings)
+elif key == "assets":
+    from vmtoolkit.dashboard import assets_page
+    assets_page.render(settings, db)
 elif key == "history":
     from vmtoolkit.dashboard import history_page
     history_page.render(settings, db, offline=False)
@@ -108,7 +111,7 @@ def test_run_is_disabled_until_required_fields_are_filled(page):
     assert not at.button[0].disabled
 
 
-@pytest.mark.parametrize("key", [t.key for t in tools_page.TOOLS] + ["setup", "reports", "automation", "history"])
+@pytest.mark.parametrize("key", [t.key for t in tools_page.TOOLS] + ["setup", "reports", "automation", "history", "assets"])
 def test_every_page_renders(page, key):
     assert not page(key).exception
 
@@ -159,7 +162,7 @@ def test_history_page_rebuilds_and_looks_back(page, settings):
     assert at.get("download_button")[0].label == "Download history as CSV"
 
 
-@pytest.mark.parametrize("key", [t.key for t in tools_page.TOOLS] + ["setup", "reports", "automation", "history"])
+@pytest.mark.parametrize("key", [t.key for t in tools_page.TOOLS] + ["setup", "reports", "automation", "history", "assets"])
 def test_every_page_renders_on_an_empty_database(settings, monkeypatch, key):
     testing = pytest.importorskip("streamlit.testing.v1")
     monkeypatch.setattr("vmtoolkit.schedule.status", lambda: "Not installed.")
@@ -176,10 +179,11 @@ def test_sidebar_search_and_groups():
 
     pages = {t.key: SimpleNamespace(title=t.title) for t in tools_page.TOOLS}
     pages.update({k: SimpleNamespace(title=k.title()) for k in ("home", "dashboard", "history", "reports",
-                                                                "setup", "automation")})
+                                                                "setup", "automation", "assets")})
     assert nav.matches("tickets", pages) == ["tickets"]
     assert "import" in nav.matches("trivy", pages)  # summaries are searched too
     assert nav.matches("no such tool", pages) == []
     grouped = nav.groups(pages)
     assert grouped["settings"][:2] == ["setup", "automation"]
-    assert sum(len(keys) for keys in grouped.values()) == len(tools_page.TOOLS) + 2
+    assert sum(len(keys) for keys in grouped.values()) == len(tools_page.TOOLS) + 3
+    assert grouped["data"][0] == "assets"

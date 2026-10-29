@@ -149,6 +149,34 @@ def exploit_model(settings, folder):
     return ["exploit-model", "score"], None
 
 
+def accept_risk(settings, folder):
+    from datetime import date, timedelta
+
+    from vmtoolkit.acceptance import max_days
+
+    action = st.radio("What to do", ["list", "add", "revoke"],
+                      format_func={"list": "Show accepted risks", "add": "Accept a risk",
+                                   "revoke": "End an acceptance"}.get)
+    if action == "list":
+        show_all = st.toggle("Include ended acceptances")
+        return ["accept", "list", *opt("--all", show_all)], None
+    if action == "revoke":
+        number = st.number_input("Acceptance number (the # in the list)", min_value=1, value=None)
+        return (["accept", "revoke", str(number)], None) if number else None
+    ids = tools.split_ids(st.text_input("Finding IDs", placeholder="412, 413 (shown on the Prioritize page)"))
+    reason = st.text_area("Why it is acceptable", placeholder="Only reachable from the management VLAN; vendor "
+                                                              "patch due in the next release")
+    approver = st.text_input("Approved by", placeholder="Name or role, e.g. CISO")
+    until = st.date_input("Accepted until", value=date.today() + timedelta(days=90),
+                          min_value=date.today() + timedelta(days=1),
+                          max_value=date.today() + timedelta(days=max_days(settings)))
+    if not (ids and reason.strip() and approver.strip()):
+        return None
+    return (["accept", "add", *ids, "--reason", reason.strip(), "--approver", approver.strip(),
+             "--until", until.isoformat()],
+            f"I confirm {approver.strip()} approved leaving these findings unfixed until {until:%B %d, %Y}")
+
+
 def fp(settings, folder):
     action = st.radio("What to do", ["list", "predict", "mark", "unmark"],
                       format_func={"list": "Show my marks", "predict": "Find likely false positives",
@@ -286,6 +314,10 @@ TOOLS = [
     Tool("tickets", "Tickets", ":material/confirmation_number:", "fix",
          "Write one remediation ticket per fix in the patch plan, and optionally send them to Jira or ServiceNow.",
          tickets, tags=["writes"]),
+    Tool("accept", "Risk acceptance", ":material/verified_user:", "fix",
+         "Record a risk you've agreed to leave unfixed for now: why, who approved it, and until when. Accepted "
+         "findings stay visible but don't count as overdue, and come back when the acceptance ends.",
+         accept_risk, tags=["writes"]),
     Tool("alerts", "Alerts", ":material/notifications:", "fix",
          "Alert when a CVE you have becomes known-exploited, its EPSS score jumps, or chatter about it spikes.",
          alert, tags=["internet", "writes"]),
@@ -347,7 +379,7 @@ def execute(cmd: list[str], cwd: Path) -> tuple[str, int, float]:
                 last = time.monotonic()
 
         st.caption("Keep this page open until it finishes.")
-        code = tools.run(cmd, cwd, on_line)
+        code = tools.run(cmd, cwd, on_line, user=st.session_state.get("user"))
     # The Results section below takes over once the command ends.
     holder.empty()
     return "".join(lines), code, time.monotonic() - started

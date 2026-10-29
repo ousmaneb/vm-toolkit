@@ -9,6 +9,8 @@ from pathlib import Path
 
 import requests
 
+from .acceptance import active_ids
+from .assets import asset_config
 from .config import ConfigError, Settings, get_secret
 from .db import parse_iso, utcnow
 from .plan import Fix, plan
@@ -35,7 +37,12 @@ def ticket_id(fix_key: str) -> str:
     return "VMT-" + hashlib.sha256(fix_key.encode("utf-8")).hexdigest()[:8]
 
 
-def _details(conn: sqlite3.Connection, fix: Fix, sla: dict[str, int]) -> dict:
+def _owner(settings: Settings, machine: str) -> str | None:
+    cfg = asset_config(settings, machine)
+    return " · ".join(filter(None, [cfg.owner, cfg.team])) or None
+
+
+def _details(conn: sqlite3.Connection, fix: Fix, sla: dict[str, int], settings: Settings) -> dict:
     ids = [f["id"] for f in fix.findings]
     rows = conn.execute(
         f"""SELECT f.id, f.severity, f.title, f.first_seen, f.installed_version, f.package, a.name AS machine,
@@ -64,6 +71,7 @@ def _details(conn: sqlite3.Connection, fix: Fix, sla: dict[str, int]) -> dict:
         "why_priority": why_priority, "due_date": due.strftime("%Y-%m-%d") if due else None,
         "due_reason": due_reason, "plan_rank": fix.rank, "risk": round(fix.risk, 1),
         "risk_share": round(fix.share, 3), "notes": fix.notes, "machines": sorted(fix.machines),
+        "owners": {m: _owner(settings, m) for m in sorted(fix.machines) if _owner(settings, m)},
         "findings": [dict(r) for r in rows],
     }
 
@@ -85,7 +93,8 @@ def render_markdown(t: dict, status: str, status_note: str | None) -> str:
         "",
         "## Affected machines",
         "",
-        *[f"- {m} ({plural(sum(f['machine'] == m for f in t['findings']), 'finding')})" for m in t["machines"]],
+        *[f"- {m} ({plural(sum(f['machine'] == m for f in t['findings']), 'finding')})"
+          + (f", owner: {t['owners'][m]}" if m in t.get("owners", {}) else "") for m in t["machines"]],
         "",
         "## Findings",
         "",
@@ -114,7 +123,8 @@ def render_text(t: dict, status: str) -> str:
              f"Priority {t['priority']}: {t['why_priority']}",
              f"Due {t['due_date'] or 'not set'}: {t['due_reason']}.", "",
              "Fix: " + t["title"], *[f"Note: {n}." for n in t["notes"]], "",
-             "Affected machines: " + ", ".join(t["machines"]), "", "Findings:"]
+             "Affected machines: " + ", ".join(f"{m} ({t['owners'][m]})" if m in t.get("owners", {}) else m
+                                               for m in t["machines"]), "", "Findings:"]
     # No ranks or plan position here: they shift whenever another fix lands, and this text decides
     # whether Jira or ServiceNow need an update.
     lines += [f"- score {f['score']:.1f}: {f['title']} on {f['machine']} ({f['severity']})"
@@ -140,7 +150,7 @@ def generate(conn: sqlite3.Connection, settings: Settings, max_fixes: int | None
     current = set()
 
     for fix in chosen:
-        t = _details(conn, fix, sla)
+        t = _details(conn, fix, sla, settings)
         current.add(t["id"])
         body = render_markdown(t, "open", None)
         digest = hashlib.sha256(render_text(t, "open").encode("utf-8")).hexdigest()
@@ -171,14 +181,21 @@ def generate(conn: sqlite3.Connection, settings: Settings, max_fixes: int | None
         _write(out_dir / f"{t['id']}.json", json.dumps({**t, "status": "open"}, indent=2, default=str))
 
     skipped = {ticket_id(f.key) for f in rest}
+    accepted = active_ids(conn)
     for old in conn.execute("SELECT * FROM tickets WHERE status = 'open'").fetchall():
         if old["ticket_id"] in current or old["ticket_id"] in skipped:
             continue
-        states = [r[0] for r in conn.execute(
-            """SELECT f.status FROM ticket_items i JOIN findings f ON f.id = i.finding_id
-               WHERE i.ticket_id = ?""", (old["ticket_id"],))]
-        note = (f"all {plural(len(states), 'finding')} fixed" if states and all(s == "fixed" for s in states)
-                else "no longer in the plan: its findings were fixed, merged as duplicates or removed")
+        items = conn.execute(
+            """SELECT f.id, f.status FROM ticket_items i JOIN findings f ON f.id = i.finding_id
+               WHERE i.ticket_id = ?""", (old["ticket_id"],)).fetchall()
+        states = [r["status"] for r in items]
+        still_open = {r["id"] for r in items if r["status"] == "open"}
+        if states and all(s == "fixed" for s in states):
+            note = f"all {plural(len(states), 'finding')} fixed"
+        elif still_open and still_open <= accepted:
+            note = "its open findings are accepted risks (see vmt accept list)"
+        else:
+            note = "no longer in the plan: its findings were fixed, merged as duplicates or removed"
         conn.execute("UPDATE tickets SET status = 'resolved', status_note = ?, resolved_at = ?, updated_at = ? "
                      "WHERE ticket_id = ?", (note, now, now, old["ticket_id"]))
         md, js = out_dir / f"{old['ticket_id']}.md", out_dir / f"{old['ticket_id']}.json"

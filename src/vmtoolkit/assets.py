@@ -14,6 +14,8 @@ class AssetConfig:
     criticality: str = DEFAULT_CRITICALITY
     internet_facing: bool = False
     aliases: list[str] = field(default_factory=list)
+    owner: str | None = None
+    team: str | None = None
     # The [assets."..."] key that matched, or None when the defaults were used.
     matched: str | None = None
 
@@ -46,6 +48,8 @@ def asset_config(settings: Settings, name: str, ip: str | None = None) -> AssetC
             criticality=e.get("criticality", DEFAULT_CRITICALITY),
             internet_facing=bool(e.get("internet_facing", False)),
             aliases=list(e.get("aliases", [])),
+            owner=e.get("owner") or None,
+            team=e.get("team") or None,
             matched=key,
         )
     return AssetConfig()

@@ -16,6 +16,7 @@ SUMMARIES = {t.key: t.summary for t in TOOLS}
 def groups(pages: dict) -> dict[str, list[str]]:
     """Group -> page keys, in workflow order. Settings also holds the setup and automation pages."""
     out = {group: [t.key for t in TOOLS if t.group == group and t.key in pages] for group in GROUPS}
+    out["data"] = ["assets"] + out["data"]
     out["settings"] = ["setup", "automation"] + out["settings"]
     return out
 

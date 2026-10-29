@@ -238,6 +238,15 @@ def detail_pages(d: ReportData) -> list:
                             table(["ID", "Machine", "Finding", "Severity", "Due", "Chance on time"], rows,
                                   [0.07, 0.16, 0.4, 0.1, 0.12, 0.15], {0, 5}) if rows else empty("None expected.")])]
 
+    rows = [[f"#{a['id']}", a["machine"], a["title"] + ("  [KEV]" if a["kev"] else ""), a["expires_at"][:10],
+             a["approved_by"], a["reason"]] for a in d.accepted]
+    story += [KeepTogether([p(f"Accepted risks ({len(d.accepted)})", h2),
+                            p("Findings a named approver agreed to leave unfixed until a date. They don't count as "
+                              "past deadline while accepted, and come back when the acceptance ends.", muted),
+                            Spacer(1, 4),
+                            table(["#", "Machine", "Finding", "Until", "Approved by", "Reason"], rows,
+                                  [0.06, 0.14, 0.3, 0.11, 0.14, 0.25]) if rows else empty("None.")])]
+
     rows = [[name, count] for name, count in d.overdue_by_machine]
     story += [KeepTogether([p("Machines with the most past-deadline findings", h2),
                             table(["Machine", "Past deadline"], rows, [0.5, 0.2], {1})

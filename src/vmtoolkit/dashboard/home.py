@@ -91,6 +91,8 @@ def render(settings: Settings, db_path: Path, pages: dict):
         with col.container(border=True, height="stretch", key=f"step-{group}"):
             st.markdown(f"**{number}. {GROUPS[group]}**")
             st.caption(text)
+            if group == "data":
+                st.page_link(pages["assets"], label="Assets", icon=":material/dns:")
             for tool in (t for t in TOOLS if t.group == group and t.key in pages):
                 st.page_link(pages[tool.key], label=tool.title, icon=tool.icon)
     with columns[len(STEPS)].container(border=True, height="stretch", key="step-settings"):

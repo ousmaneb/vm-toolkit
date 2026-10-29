@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .config import Settings
 from .db import parse_iso, utcnow
+from .acceptance import accepted_at, listing as acceptances, periods
 from .forecast import forecast
 
 SEVERITIES = ["critical", "high", "medium", "low"]
@@ -22,6 +23,7 @@ class Finding:
     first_seen: datetime
     fixed_at: datetime | None
     cves: list[str]
+    accepted: list[tuple[datetime, datetime]] = field(default_factory=list)  # risk acceptance periods
 
 
 @dataclass
@@ -54,6 +56,8 @@ class ReportData:
     misses: list[dict]
     overdue_by_machine: list[tuple[str, int]]
     freshness: list[tuple[str, str]]
+    accepted: list[dict] = field(default_factory=list)  # active risk acceptances
+    stale: list[dict] = field(default_factory=list)  # machines scans have stopped reaching
     last_scan: datetime | None = None
     first_seen: datetime | None = None  # earliest finding: no trend can be claimed before there was data
     status: str = "green"
@@ -79,8 +83,10 @@ def load_findings(conn: sqlite3.Connection) -> list[Finding]:
            FROM findings f JOIN assets a ON a.id = f.asset_id
            WHERE f.severity != 'info' AND f.first_seen IS NOT NULL
              AND f.id NOT IN (SELECT finding_id FROM fp_labels WHERE label = 'false_positive')""")
+    accepted = periods(conn)
     return [Finding(r["id"], r["machine"], r["title"], r["severity"], parse_iso(r["first_seen"]),
-                    parse_iso(r["fixed_at"]) if r["fixed_at"] else None, cves.get(r["id"], []))
+                    parse_iso(r["fixed_at"]) if r["fixed_at"] else None, cves.get(r["id"], []),
+                    accepted.get(r["id"], []))
             for r in rows]
 
 
@@ -88,12 +94,18 @@ def is_open(f: Finding, at: datetime) -> bool:
     return f.first_seen <= at and (f.fixed_at is None or f.fixed_at > at)
 
 
+def is_overdue(f: Finding, sla: dict[str, int], at: datetime) -> bool:
+    """Open past its deadline on that day, and not covered by a risk acceptance then."""
+    return (is_open(f, at) and f.severity in sla and _days(f.first_seen, at) > sla[f.severity]
+            and not accepted_at(f.accepted, at))
+
+
 def snapshot(findings: list[Finding], kev: dict[str, datetime], sla: dict[str, int], at: datetime) -> Snapshot:
     open_ = [f for f in findings if is_open(f, at)]
     return Snapshot(
         open=len(open_),
         critical_high=sum(f.severity in ("critical", "high") for f in open_),
-        overdue=sum(f.severity in sla and _days(f.first_seen, at) > sla[f.severity] for f in open_),
+        overdue=sum(is_overdue(f, sla, at) for f in open_),
         known_exploited=sum(any(c in kev and kev[c] <= at for c in f.cves) for f in open_),
     )
 
@@ -142,7 +154,7 @@ def build(conn: sqlite3.Connection, settings: Settings, days: int = 7, now: date
             "on_time": len(on_time) / len(done) if done else None,
             "avg_days": sum(_days(f.first_seen, f.fixed_at) for f in done) / len(done) if done else None,
             "open": len(open_),
-            "overdue": sum(sev in sla and _days(f.first_seen, now) > sla[sev] for f in open_),
+            "overdue": sum(is_overdue(f, sla, now) for f in open_),
         })
     graded = [f for f in fixed_recent if f.severity in sla]
     on_time_rate = (sum(_days(f.first_seen, f.fixed_at) <= sla[f.severity] for f in graded) / len(graded)
@@ -156,7 +168,8 @@ def build(conn: sqlite3.Connection, settings: Settings, days: int = 7, now: date
         if listed and is_open(f, now):
             age = _days(f.first_seen, now)
             kev_open.append({"cve": listed[0], "machine": f.machine, "title": f.title, "severity": f.severity,
-                             "days_open": int(age), "overdue": f.severity in sla and age > sla[f.severity],
+                             "days_open": int(age), "overdue": is_overdue(f, sla, now),
+                             "accepted": accepted_at(f.accepted, now),
                              "kev_added": kev[listed[0]], "ransomware": any(c in ransomware for c in listed),
                              "internet": f.id in internet})
     kev_open.sort(key=lambda r: (not r["overdue"], -r["days_open"]))
@@ -188,7 +201,7 @@ def build(conn: sqlite3.Connection, settings: Settings, days: int = 7, now: date
 
     by_machine: dict[str, int] = {}
     for f in findings:
-        if is_open(f, now) and f.severity in sla and _days(f.first_seen, now) > sla[f.severity]:
+        if is_overdue(f, sla, now):
             by_machine[f.machine] = by_machine.get(f.machine, 0) + 1
     overdue_by_machine = sorted(by_machine.items(), key=lambda kv: (-kv[1], kv[0]))[:10]
 
@@ -209,6 +222,8 @@ def build(conn: sqlite3.Connection, settings: Settings, days: int = 7, now: date
         top_fixes=top_fixes, total_risk=total_risk, top_risks=top_risks, misses=misses,
         overdue_by_machine=overdue_by_machine, freshness=freshness,
         last_scan=parse_iso(last_scan) if last_scan else None,
+        accepted=acceptances(conn),
+        stale=_stale(conn, settings, now),
         first_seen=min((f.first_seen for f in findings), default=None),
     )
     data.status, data.status_reason = rate(data)
@@ -218,6 +233,13 @@ def build(conn: sqlite3.Connection, settings: Settings, days: int = 7, now: date
     data.advice = recommendations(data)
     data.questions = questions(data)
     return data
+
+
+def _stale(conn: sqlite3.Connection, settings: Settings, now: datetime) -> list[dict]:
+    from .inventory import machines, stale_days
+
+    limit = stale_days(settings)
+    return [{**m, "limit": limit} for m in machines(conn, settings, now) if m["stale"]]
 
 
 def rate(d: ReportData) -> tuple[str, str]:
@@ -281,6 +303,15 @@ def needs_attention(d: ReportData) -> list[str]:
     if d.overdue_by_machine:
         name, count = d.overdue_by_machine[0]
         items.append(f"Most overdue machine: {name} ({count} past deadline).")
+    if d.stale:
+        items.append(f"{_plural(len(d.stale), 'machine')} not scanned for over {d.stale[0]['limit']} days: "
+                     + ", ".join(m["machine"] for m in d.stale[:5]) + ("..." if len(d.stale) > 5 else "") + ".")
+    if d.accepted:
+        expiring = sum(a["state"] == "expiring" for a in d.accepted)
+        kev = sum(a["kev"] for a in d.accepted)
+        items.append(f"{_plural(len(d.accepted), 'risk')} formally accepted and left unfixed"
+                     + (f", {expiring} ending within a week" if expiring else "")
+                     + (f"; {kev} of them actively exploited" if kev else "") + ".")
     return items
 
 

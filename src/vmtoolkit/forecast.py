@@ -12,6 +12,7 @@ from functools import lru_cache
 from itertools import groupby
 from datetime import datetime, timedelta, timezone
 
+from .acceptance import accepted_at, periods
 from .assets import asset_config
 from .config import Settings
 from .db import parse_iso, utcnow
@@ -122,9 +123,10 @@ def forecast(conn: sqlite3.Connection, settings: Settings, as_of: datetime | Non
     sla = {k: int(v) for k, v in settings.section("sla_days").items()}
     history = _history(conn, as_of, settings)
     curve_for = _curves(history)
+    accepted = periods(conn)
     out = []
     for h in history:
-        if h["fixed"] or h["severity"] not in sla:
+        if h["fixed"] or h["severity"] not in sla or accepted_at(accepted.get(h["id"]), as_of):
             continue
         age, deadline = h["days"], sla[h["severity"]]
         due = (h["first"] + timedelta(days=deadline)).strftime("%Y-%m-%d")

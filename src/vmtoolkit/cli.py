@@ -1,4 +1,5 @@
 import logging
+import os
 import shutil
 import sys
 from importlib import resources
@@ -24,6 +25,8 @@ classify_app = typer.Typer(no_args_is_help=True,
 app.add_typer(classify_app, name="classify")
 notes_app = typer.Typer(no_args_is_help=True, help="Your own notes about CVEs and findings (used by vmt triage).")
 app.add_typer(notes_app, name="notes")
+accept_app = typer.Typer(no_args_is_help=True, help="Accept a risk: leave a finding unfixed until a date, with approval.")
+app.add_typer(accept_app, name="accept")
 users_app = typer.Typer(no_args_is_help=True, help="Dashboard accounts.")
 app.add_typer(users_app, name="users")
 schedule_app = typer.Typer(no_args_is_help=True, help="Run `vmt daily` automatically every day.")
@@ -340,6 +343,92 @@ def backup_cmd(ctx: typer.Context, keep: int = typer.Option(14, help="How many d
     typer.echo(uploaded or "No off-site copy: set [backup] target in config.toml to keep one off this server.")
 
 
+@app.command("assets")
+def assets_cmd(
+    ctx: typer.Context,
+    stale: bool = typer.Option(False, "--stale", help="Only machines scans have stopped reaching."),
+    unowned: bool = typer.Option(False, "--unowned", help="Only machines with no owner set."),
+):
+    """Every machine: importance, exposure, owner, open and overdue findings, and when it was last scanned."""
+    from .inventory import machines, stale_days
+
+    settings = settings_from(ctx)
+    conn = db.connect(settings.db_path)
+    try:
+        rows = machines(conn, settings)
+    finally:
+        conn.close()
+    shown = [m for m in rows if (not stale or m["stale"]) and (not unowned or not m["owner"])]
+    typer.echo(f"{'machine':<24} {'importance':<10} {'internet':<8} {'open':>5} {'overdue':>7}  {'last scan':<10}  owner")
+    for m in shown:
+        last = f"{m['last_scanned']:%Y-%m-%d}" if m["last_scanned"] else "never"
+        flag = "  STALE" if m["stale"] else ""
+        owner = " · ".join(filter(None, [m["owner"], m["team"]])) or "-"
+        typer.echo(f"{m['machine'][:24]:<24} {m['importance']:<10} {'yes' if m['internet_facing'] else 'no':<8} "
+                   f"{m['open']:>5} {m['overdue']:>7}  {last:<10}  {owner}{flag}")
+    stale_count = sum(m["stale"] for m in rows)
+    typer.echo(f"{len(rows)} machines; {sum(not m['owner'] for m in rows)} without an owner; {stale_count} not "
+               f"scanned for over {stale_days(settings)} days. Set owners and importance under [assets] in "
+               "config.toml.")
+
+
+@accept_app.command("add")
+def accept_add(
+    ctx: typer.Context,
+    ids: list[int] = typer.Argument(..., help="Finding IDs (shown by `vmt prioritize`)."),
+    reason: str = typer.Option(..., help="Why the risk is acceptable, e.g. the compensating control."),
+    approver: str = typer.Option(..., help="Who approved it (name or role)."),
+    until: str = typer.Option(..., help="Last day before it counts again, e.g. 2026-12-31."),
+):
+    """Accept the risk of leaving findings unfixed until a date. They stop counting toward deadlines."""
+    import getpass
+
+    from .acceptance import accept
+
+    settings = settings_from(ctx)
+    conn = db.connect(settings.db_path)
+    try:
+        recorded_by = os.environ.get("VMT_USER") or getpass.getuser()
+        for line in accept(conn, settings, ids, reason, approver, until, recorded_by):
+            typer.echo(line)
+    finally:
+        conn.close()
+
+
+@accept_app.command("list")
+def accept_list(ctx: typer.Context, show_all: bool = typer.Option(False, "--all", help="Include ended ones.")):
+    """Accepted risks, soonest to expire first."""
+    from .acceptance import listing
+
+    conn = db.connect(settings_from(ctx).db_path)
+    try:
+        rows = listing(conn, include_ended=show_all)
+    finally:
+        conn.close()
+    if not rows:
+        typer.echo("No accepted risks.")
+    for r in rows:
+        kev = "  [KEV]" if r["kev"] else ""
+        typer.echo(f"#{r['id']:<4} {r['state']:<9} until {r['expires_at'][:10]}  finding {r['finding_id']} "
+                   f"{r['machine'][:20]:<20} {r['severity']:<8} {r['title'][:50]}{kev}")
+        typer.echo(f"       approved by {r['approved_by']}, recorded by {r['recorded_by']}: {r['reason']}")
+
+
+@accept_app.command("revoke")
+def accept_revoke(ctx: typer.Context, acceptance_id: int = typer.Argument(..., help="The # shown by `vmt accept list`.")):
+    """End an acceptance now; the finding counts toward deadlines again."""
+    import getpass
+
+    from .acceptance import revoke
+
+    conn = db.connect(settings_from(ctx).db_path)
+    try:
+        ok = revoke(conn, acceptance_id, os.environ.get("VMT_USER") or getpass.getuser())
+    finally:
+        conn.close()
+    typer.echo(f"Revoked acceptance #{acceptance_id}." if ok else f"No active acceptance #{acceptance_id}.")
+
+
 @users_app.command("add")
 def users_add(ctx: typer.Context, username: str = typer.Argument(...)):
     """Create a dashboard account. Asks for the password twice."""
@@ -438,8 +527,15 @@ def prioritize_cmd(
         typer.echo("No open findings to rank.")
         return
     typer.echo(f"{'rank':>4} {'score':>5}  {'id':>5}  {'machine':<20} {'severity':<8} title")
+    from .acceptance import active_ids
+
+    conn = db.connect(settings.db_path)
+    try:
+        accepted = active_ids(conn)
+    finally:
+        conn.close()
     for r in shown:
-        flag = "  [KEV]" if r.on_kev else ""
+        flag = ("  [KEV]" if r.on_kev else "") + ("  [accepted risk]" if r.finding_id in accepted else "")
         typer.echo(f"{r.rank:>4} {r.score:>5.1f}  {r.finding_id:>5}  {r.machine[:20]:<20} {r.severity:<8} "
                    f"{r.title[:60]}{flag}")
     typer.echo(f"{len(ranked)} open findings ranked. Run `vmt prioritize --explain <id>` to see why.")

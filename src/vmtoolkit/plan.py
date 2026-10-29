@@ -9,6 +9,7 @@ import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass, field
 
+from .acceptance import active_ids
 from .config import Settings
 from .db import utcnow
 from .deps import version_key
@@ -44,6 +45,7 @@ def _solution_key(text: str) -> str:
 
 
 def build_fixes(conn: sqlite3.Connection) -> list[Fix]:
+    accepted = active_ids(conn)
     rows = conn.execute(
         """SELECT p.rank, p.score, f.id, f.scanner, f.rule_id, f.title, f.package, f.installed_version,
                   f.fixed_version, f.solution, a.name AS machine
@@ -53,6 +55,8 @@ def build_fixes(conn: sqlite3.Connection) -> list[Fix]:
     fixes: dict[str, Fix] = {}
     versions: dict[str, set[str]] = defaultdict(set)
     for r in rows:
+        if r["id"] in accepted:
+            continue  # an accepted risk is not planned work until the acceptance ends
         if r["package"]:
             key = f"package:{r['package'].lower()}"
             action = f"Upgrade {r['package']}"

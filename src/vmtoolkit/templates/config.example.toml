@@ -79,10 +79,17 @@ low = 180
 #   criticality: low | medium | high | critical
 #   internet_facing: reachable from the internet (raises risk for network-exploitable CVEs)
 #   aliases: other names or IPs scanners use for the same machine
+#   owner: the person responsible for fixing it; team: the team it belongs to (used for reports by team)
 # [assets."web-01.lab"]
 # criticality = "high"
 # internet_facing = false
 # aliases = ["192.168.56.10", "docker-web"]
+# owner = "alice@example.com"
+# team = "Web"
+
+[coverage]
+# A machine that scans used to reach but haven't for this many days is flagged and alerted on once.
+stale_days = 14
 
 [prioritize]
 # score = 100 x likelihood x impact x machine importance x exposure

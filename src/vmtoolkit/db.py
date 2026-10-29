@@ -332,6 +332,21 @@ CREATE TABLE IF NOT EXISTS plan_history (
     PRIMARY KEY (day, rank)
 );
 
+-- Findings a named person has agreed to leave unfixed until a date. While active they don't count
+-- toward deadlines, the patch plan or tickets; they stay open and visible.
+CREATE TABLE IF NOT EXISTS risk_acceptances (
+    id INTEGER PRIMARY KEY,
+    finding_id INTEGER NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
+    reason TEXT NOT NULL,
+    approved_by TEXT NOT NULL,
+    recorded_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    revoked_at TEXT,
+    revoked_by TEXT
+);
+CREATE INDEX IF NOT EXISTS risk_acceptances_finding ON risk_acceptances (finding_id);
+
 -- Dashboard sign-in. Passwords are salted scrypt hashes; failed counts drive the lockout.
 CREATE TABLE IF NOT EXISTS users (
     username TEXT PRIMARY KEY,

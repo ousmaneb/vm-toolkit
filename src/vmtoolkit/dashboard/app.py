@@ -13,7 +13,8 @@ import altair as alt
 import streamlit as st
 
 from vmtoolkit.config import load_settings, production
-from vmtoolkit.dashboard import auth, history_page, home, metrics, nav, reports_page, style, tools, tools_page
+from vmtoolkit.dashboard import (assets_page, auth, history_page, home, metrics, nav, reports_page, style, tools,
+                                 tools_page)
 
 SERIES = {"light": {"new": "#2a78d6", "fixed": "#eb6834", "surface": "#fcfcfb"},
           "dark": {"new": "#3987e5", "fixed": "#d95926", "surface": "#1a1a19"}}
@@ -204,6 +205,8 @@ def main():
                                                                        state["offline"]),
                                tool.title, tool.icon, tool.key)
     pages["setup"] = page(lambda: tools_page.render_setup(state["settings"]), "Setup status", ":material/key:", "setup")
+    pages["assets"] = page(lambda: assets_page.render(state["settings"], state["db"]),
+                           "Assets", ":material/dns:", "assets")
     pages["history"] = page(lambda: history_page.render(state["settings"], state["db"], state["offline"]),
                             "History", ":material/history:", "history")
     pages["reports"] = page(lambda: reports_page.render_reports(state["settings"], state["db"], state["offline"]),

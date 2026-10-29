@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from vmtoolkit.acceptance import active_ids
+
 SEVERITY_ORDER = ["critical", "high", "medium", "low"]
 AGE_BUCKETS = [(0, 30, "0-30 days"), (31, 90, "31-90 days"), (91, 180, "91-180 days"), (181, None, "over 180 days")]
 
@@ -30,6 +32,7 @@ def load_findings(conn: sqlite3.Connection) -> pd.DataFrame:
     )
     for col in ("first_seen", "last_seen", "fixed_at"):
         df[col] = pd.to_datetime(df[col], utc=True)
+    df["accepted"] = df["id"].isin(active_ids(conn))
     df["severity"] = pd.Categorical(df["severity"], categories=SEVERITY_ORDER, ordered=True)
     return df
 
@@ -61,7 +64,8 @@ def age_buckets(df: pd.DataFrame, now: datetime) -> pd.DataFrame:
 
 def overdue(df: pd.DataFrame, sla_days: dict[str, int], now: datetime) -> pd.DataFrame:
     cols = ["machine", "severity", "title", "cves", "first_seen", "age_days", "deadline_days", "days_overdue", "why"]
-    open_ = df[df.status == "open"].copy()
+    # An accepted risk has no deadline while the acceptance lasts.
+    open_ = df[(df.status == "open") & ~df["accepted"]].copy()
     # An empty frame has no dtypes to do date arithmetic with (a fresh install has no findings yet).
     if open_.empty:
         return pd.DataFrame(columns=cols)
