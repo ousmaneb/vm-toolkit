@@ -36,7 +36,7 @@ def test_full_run_on_report_day(conn, settings):
                          "report"]
     row = conn.execute("SELECT * FROM daily_runs").fetchone()
     assert (row["status"], row["reports"]) == ("ok", "/r/2099-03-02-ceo.pdf, /r/2099-03-02-ciso.pdf")
-    assert "=== exit code 0" in Path(row["log_path"]).read_text()
+    assert "=== exit code 0" in Path(row["log_path"]).read_text(encoding="utf-8")
 
 
 def test_nessus_failure_stops_processing_and_alerts(conn, settings):

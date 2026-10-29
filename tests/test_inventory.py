@@ -65,5 +65,5 @@ def test_tickets_name_the_owner(conn, settings):
     seed(conn, "fake-web-01", 1, 2, [(1, "critical", 40)])
     prioritize(conn, settings)
     generate(conn, settings)
-    text = next(tickets_dir(settings).glob("*.md")).read_text()
+    text = next(tickets_dir(settings).glob("*.md")).read_text(encoding="utf-8")
     assert "fake-web-01 (1 finding), owner: alice@example.com · Web" in text
