@@ -13,7 +13,7 @@ import altair as alt
 import streamlit as st
 
 from vmtoolkit.config import load_settings, production
-from vmtoolkit.dashboard import auth, history_page, home, metrics, reports_page, style, tools, tools_page
+from vmtoolkit.dashboard import auth, history_page, home, metrics, nav, reports_page, style, tools, tools_page
 
 SERIES = {"light": {"new": "#2a78d6", "fixed": "#eb6834", "surface": "#fcfcfb"},
           "dark": {"new": "#3987e5", "fixed": "#d95926", "surface": "#1a1a19"}}
@@ -211,19 +211,20 @@ def main():
     pages["automation"] = page(lambda: reports_page.render_automation(state["settings"], state["db"], state["offline"]),
                                "Automation", ":material/event_repeat:", "automation")
 
-    sections = {"Overview": [pages["home"], pages["dashboard"], pages["history"], pages["reports"]]}
-    for group, name in tools_page.GROUPS.items():
-        sections[name] = [pages[t.key] for t in shown_tools if t.group == group]
-    sections[tools_page.GROUPS["settings"]][:0] = [pages["setup"], pages["automation"]]
-    nav = st.navigation(sections, expanded=True)
+    nav_page = st.navigation(list(pages.values()), position="hidden")
+    current = next(key for key, p in pages.items() if p.title == nav_page.title)
+    # The selectbox below sets this; on the first run it is still the startup database.
+    chosen = Path(st.session_state.get("db-choice", settings.db_path)).resolve()
+    nav.sidebar(pages, current, "Live data" if live else db_label(chosen, settings.data_dir))
 
     with st.sidebar:
-        st.markdown("**Data**")
+        st.html('<div class="vmt-nav-label">Data source</div>')
         if live:
             db_path = settings.data_dir / "vmt.db"
         else:
             choices = tools.database_choices(settings, settings.db_path)
             db_path = st.selectbox("Database", choices, format_func=lambda p: db_label(p, settings.data_dir),
+                                   key="db-choice", label_visibility="collapsed",
                                    help="Every page uses this database. 'Live data' is your real data.")
         offline = st.toggle("Offline mode", help="Tools use only cached web data and make no network calls.")
     if user:
@@ -235,7 +236,7 @@ def main():
             if metrics.has_fake(conn):
                 st.warning("FAKE DATA: this database contains generated demo data, not results from your environment.",
                            icon=":material/science:")
-    nav.run()
+    nav_page.run()
 
 
 if __name__ == "__main__":

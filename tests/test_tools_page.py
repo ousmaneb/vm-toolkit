@@ -167,3 +167,19 @@ def test_every_page_renders_on_an_empty_database(settings, monkeypatch, key):
     db.connect(settings.db_path).close()
     monkeypatch.setattr("sys.argv", ["page", str(settings.base_dir / "config.toml"), str(settings.db_path), key])
     assert not testing.AppTest.from_string(PAGE, default_timeout=60).run().exception
+
+
+def test_sidebar_search_and_groups():
+    from types import SimpleNamespace
+
+    from vmtoolkit.dashboard import nav
+
+    pages = {t.key: SimpleNamespace(title=t.title) for t in tools_page.TOOLS}
+    pages.update({k: SimpleNamespace(title=k.title()) for k in ("home", "dashboard", "history", "reports",
+                                                                "setup", "automation")})
+    assert nav.matches("tickets", pages) == ["tickets"]
+    assert "import" in nav.matches("trivy", pages)  # summaries are searched too
+    assert nav.matches("no such tool", pages) == []
+    grouped = nav.groups(pages)
+    assert grouped["settings"][:2] == ["setup", "automation"]
+    assert sum(len(keys) for keys in grouped.values()) == len(tools_page.TOOLS) + 2
