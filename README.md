@@ -1,9 +1,50 @@
 # vmtoolkit
 
-A vulnerability management toolkit. One command, `vmt`, with a subcommand per tool.
-Every tool reads and writes the same SQLite database (`data/vmt.db` by default).
+A vulnerability management toolkit for a security team. It collects scan results from Nessus,
+OpenVAS/Greenbone and Trivy, adds threat intelligence to every CVE, ranks open findings by real risk,
+and turns them into a patch plan, tickets, alerts and plain-English reports for the CEO and CISO.
+
+Most vulnerability backlogs are too long to fix in order of severity score. The toolkit answers the
+questions a team actually has to decide on:
+
+- **Which findings matter now?** It checks every CVE against CISA's Known Exploited
+  Vulnerabilities list, EPSS exploit likelihood, NVD details and public exploit code, then weighs
+  them against how important and how exposed each machine is. Every rank comes with its reasons.
+- **What is the least work that removes the most risk?** It groups findings into fixes (one update
+  often closes dozens of findings on many machines) and orders them by risk removed.
+- **Are we keeping up?** It tracks deadlines per severity, forecasts which findings will miss
+  them, and keeps a day-by-day history of the numbers, rankings and plans.
+- **What do leaders need to know?** It writes CEO and CISO reports with a red/amber/green status,
+  trends, recommendations and questions to ask, in language people outside security can follow.
+
+It runs as one command, `vmt`, with a subcommand per tool, and a dashboard in the browser that runs
+every tool. Every tool reads and writes the same SQLite database (`data/vmt.db` by default). In
+production it runs as one container that pulls from Nessus, processes, alerts and backs up every
+morning on its own.
 
 Works on Windows, macOS and Linux with Python 3.11 or newer.
+
+## Vulnerability management steps
+
+Vulnerability management is a repeating cycle. This table shows which steps the toolkit covers and
+which tools do the work.
+
+| # | Step | Status | Tools |
+|---|---|---|---|
+| 1 | **Know your assets**: every machine, how important it is, whether it's reachable from the internet | Partial | Machines are recorded from scans; importance and exposure are set in `[assets]` in `config.toml`. No owners yet. |
+| 2 | **Discover vulnerabilities**: regular scans of machines, containers and code dependencies | Built | `vmt nessus pull`, `vmt import` (Nessus, OpenVAS/Greenbone, Trivy), `vmt deps` |
+| 3 | **Combine and clean up**: one format, no duplicates, false positives removed | Built | `vmt import`, `vmt dedupe`, `vmt fp` |
+| 4 | **Add threat context**: is it exploited, how likely, how severe, is there exploit code | Built | `vmt enrich` (CISA KEV, EPSS, NVD, Exploit-DB, Metasploit), `vmt monitor`, `vmt exploit-model`, `vmt classify`, `vmt extract` |
+| 5 | **Prioritise by risk**: likelihood × impact × machine importance × exposure | Built | `vmt prioritize`, with written reasons for every rank |
+| 6 | **Plan the fixes**: group findings into updates, set deadlines by severity | Built | `vmt plan`, `[sla_days]` |
+| 7 | **Fix or reduce the risk**: patch, reconfigure, isolate, or accept the risk | Partial | `vmt tickets` (files, Jira, ServiceNow), `vmt triage` for fix steps. No formal risk acceptance with an expiry date yet. |
+| 8 | **Verify**: confirm each fix with a later scan | Built | A finding is marked fixed only when a later scan of the same machine stops reporting it; tickets close when all their findings are fixed. |
+| 9 | **Monitor continuously**: newly exploited CVEs, deadline risks, failed runs | Built | `vmt alert`, `vmt forecast`, `vmt daily` with `vmt schedule` or `vmt serve` |
+| 10 | **Measure and report**: open, overdue, time to fix, on-time rate, trends | Built | `vmt dashboard`, `vmt history`, `vmt report` (CEO and CISO PDFs) |
+| 11 | **Improve the process**: find and fix root causes | Partial | Report recommendations and the History page show the trend. No breakdown by team or software yet. |
+
+8 of the 11 steps are built and 3 are partial. Planned next: risk acceptance with an expiry and
+approver (step 7), machine owners and teams (step 1), and root-cause breakdowns (step 11).
 
 ## Architecture
 
