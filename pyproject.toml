@@ -7,7 +7,7 @@ name = "vmtoolkit"
 version = "0.1.0"
 description = "Vulnerability management toolkit"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "requests>=2.31",
     "requests-cache>=1.1",
@@ -15,7 +15,6 @@ dependencies = [
     "typer>=0.12",
     "defusedxml>=0.7",
     "packaging>=23",
-    "tomli>=2.0; python_version < '3.11'",
 ]
 
 [project.optional-dependencies]

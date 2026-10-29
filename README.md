@@ -3,7 +3,7 @@
 A vulnerability management toolkit. One command, `vmt`, with a subcommand per tool.
 Every tool reads and writes the same SQLite database (`data/vmt.db` by default).
 
-Works on Windows, macOS and Linux with Python 3.10 or newer.
+Works on Windows, macOS and Linux with Python 3.11 or newer.
 
 To run it for a team in the cloud (Railway, Azure or AWS), see [DEPLOY.md](DEPLOY.md). The rest
 of this file covers running it on one computer.
@@ -1110,4 +1110,4 @@ pytest
 
 The tests use only synthetic data (fake hosts, 192.0.2.x addresses, CVE-2099-* IDs) and never call
 the network: HTTP is mocked with `responses` and SMTP with a stand-in class.
-`.github/workflows/tests.yml` runs them on Windows, macOS and Linux with Python 3.10 and 3.13.
+`.github/workflows/tests.yml` runs them on Windows, macOS and Linux with Python 3.11 and 3.13.

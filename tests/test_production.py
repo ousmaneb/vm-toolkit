@@ -1,3 +1,4 @@
+import sys
 from datetime import date, datetime
 from pathlib import Path
 
@@ -71,7 +72,9 @@ def test_nessus_proxy_and_ca_from_secrets(settings, monkeypatch):
     client = NessusClient.from_settings(settings)
     assert client.session.proxies["https"] == "http://localhost:1055"
     ca = Path(client.session.verify)
-    assert ca.read_text().startswith("-----BEGIN CERTIFICATE-----") and oct(ca.stat().st_mode)[-3:] == "600"
+    assert ca.read_text().startswith("-----BEGIN CERTIFICATE-----")
+    if sys.platform != "win32":  # Windows has no Unix permission bits
+        assert oct(ca.stat().st_mode)[-3:] == "600"
 
 
 def test_daily_routine_timing():
